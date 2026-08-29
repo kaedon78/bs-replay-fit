@@ -100,6 +100,7 @@ namespace ControllerAutoAdjust
                     _shown = Advice.Version;
                     _registered.Refresh();
                     _registered.RedrawRange();
+                    _registered.RedrawLists();
                 }
                 // Every frame, not only on a version bump: the fill should move smoothly
                 // rather than in the steps the text updates on.
@@ -201,6 +202,16 @@ namespace ControllerAutoAdjust
                 foreach (var profile in Usable())
                 {
                     choices.Add(Describe(profile));
+                }
+                // A stored range keeps the numbers it was given, not the profile it came
+                // from, so editing that profile leaves the range describing a grip no
+                // profile has any more. Without its own entry the list cannot show it and
+                // silently falls back to the first, which reads as the answer having been
+                // lost rather than as the profile having moved.
+                var current = Profile;
+                if (!choices.Contains(current))
+                {
+                    choices.Add(current);
                 }
                 return choices;
             }
@@ -959,6 +970,53 @@ namespace ControllerAutoAdjust
 
         /// <summary>Ask for a scroll to the end once the layout has caught up.</summary>
         private void ScrollSoon() => _scrollIn = 2;
+
+        /// <summary>
+        /// Put the current choices back into the dropdowns.
+        /// </summary>
+        /// <remarks>
+        /// BSML reads a list's choices once, when the panel is built. Both of these describe
+        /// profiles by their values, so writing a fit into a profile changes every label in
+        /// them, and the dropdown carried on offering the numbers that profile used to hold.
+        ///
+        /// Only when the labels have actually changed, because handing a list new values
+        /// makes it re-read its selection, and doing that every frame would fight a player
+        /// trying to change it.
+        /// </remarks>
+        internal void RedrawLists()
+        {
+            Relist(_profileList, ProfileChoices);
+            Relist(_targetList, TargetChoices);
+        }
+
+        private static void Relist(ListSetting list, List<object> choices)
+        {
+            if (list == null)
+            {
+                return;
+            }
+            var held = list.Values;
+            if (held != null && held.Count == choices.Count)
+            {
+                var same = true;
+                for (var i = 0; i < choices.Count; i++)
+                {
+                    if (!Equals(held[i], choices[i]))
+                    {
+                        same = false;
+                        break;
+                    }
+                }
+                if (same)
+                {
+                    return;
+                }
+            }
+            list.Values = choices;
+            // Re-reads the bound value from the host, so the field shows what the getter
+            // now says rather than the label it was holding.
+            list.ReceiveValue();
+        }
 
         private static string Active(GameObject row) =>
             row != null && row.activeSelf ? "1" : "0";
