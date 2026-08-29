@@ -48,8 +48,12 @@ namespace ControllerAutoAdjust
             reading = default;
             reading.PlatformHelper = "none";
 
+            // Scene-loaded only. FindObjectsOfTypeAll also returns prefabs, whose offset
+            // provider is unset, and its ordering is not guaranteed -- so a prefab landing
+            // last would overwrite a hand's real settings with zeroes on some frames and not
+            // others.
             var controllers = Resources.FindObjectsOfTypeAll<VRController>()
-                .Where(c => c != null)
+                .Where(c => c != null && c.gameObject.scene.isLoaded)
                 .ToList();
             if (controllers.Count == 0)
             {
