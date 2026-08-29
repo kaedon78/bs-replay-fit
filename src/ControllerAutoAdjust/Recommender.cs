@@ -514,12 +514,12 @@ namespace ControllerAutoAdjust
         /// it -- so the panel's controls govern the earlier part alone, and saying which part
         /// that is stops them reading as a filter over everything.
         ///
-        /// Whether that earlier part is one grip is measurable, and it is still measured --
-        /// but to the log, not to the panel. The check cannot see a change in the newest or
-        /// oldest few sittings, which includes every change made recently, so it was reporting
-        /// "no split found" exactly when a player had just made one. The player knows their
-        /// own history better than a statistic run over eleven runs, and they can now say so
-        /// directly.
+        /// Whether that earlier part is one grip is measurable, and was measured here for a
+        /// while. It is not any more. The check could not see a change in the newest or
+        /// oldest few sittings, which is where every recent change is, so it reported "no
+        /// split found" exactly when a player had just made one -- and a player asked to
+        /// draw the boundary themselves knows their own history better than a statistic run
+        /// over eleven runs. Splitting the range by hand replaced it.
         /// </remarks>
         private static string DescribeTheGap(List<ReplayCuts.Extraction> unknown, int total)
         {
@@ -532,36 +532,6 @@ namespace ControllerAutoAdjust
                 ? $"{known} runs have recorded settings; {unknown.Count} predate this mod"
                 : $"All {unknown.Count} runs predate this mod";
 
-            var sessions = unknown
-                .GroupBy(r => r.Played.Date)
-                .Where(g => g.Count() >= 2)
-                .Select(g => new ChangeDetector.Session
-                {
-                    Day = g.Key,
-                    Turn = OffsetSearch.FitTurn(g.SelectMany(r => r.Left.Cuts).ToList()),
-                    Cuts = g.Sum(r => r.Left.Cuts.Count),
-                })
-                .ToList();
-
-            var verdict = ChangeDetector.Scan(sessions);
-            if (!verdict.Conclusive)
-            {
-                Plugin.Log.Info(
-                    $"grip-change check: too few sittings ({verdict.Sessions}) to look");
-            }
-            else if (verdict.Split)
-            {
-                Plugin.Log.Warn(
-                    $"grip-change check: the residual shifts {verdict.GapDegrees:F1} deg around "
-                    + $"{verdict.At:d MMM} (statistic {verdict.Statistic:F1})");
-            }
-            else
-            {
-                Plugin.Log.Info(
-                    $"grip-change check: none found between {verdict.TestableFrom:d MMM} and "
-                    + $"{verdict.TestableTo:d MMM}, largest shift {verdict.GapDegrees:F1} deg "
-                    + "(changes outside those dates are not visible to it)");
-            }
             return lead + " and need a range assigned below.";
         }
 
