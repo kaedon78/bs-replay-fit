@@ -440,6 +440,7 @@ namespace ControllerAutoAdjust
 
             Advice.Left = "";
             Advice.Right = "";
+            Advice.Recommended = null;
             var advised = false;
 
             // The bar is divided by work, not by group. The search sweeps the same candidate
@@ -469,10 +470,26 @@ namespace ControllerAutoAdjust
                 var leftFrom = soFar * scale;
                 var leftSpan = leftCuts.Count * scale;
                 var rightSpan = rightCuts.Count * scale;
-                Report("   left", leftCuts, group.Epoch.LeftRotation, true, group.Epoch,
-                       trusted, show, leftFrom, leftSpan);
-                Report("   right", rightCuts, group.Epoch.RightRotation, false, group.Epoch,
-                       trusted, show, leftFrom + leftSpan, rightSpan);
+                var toLeft = Report(
+                    "   left", leftCuts, group.Epoch.LeftRotation, true, group.Epoch,
+                    trusted, show, leftFrom, leftSpan);
+                var toRight = Report(
+                    "   right", rightCuts, group.Epoch.RightRotation, false, group.Epoch,
+                    trusted, show, leftFrom + leftSpan, rightSpan);
+
+                // Both hands or neither. Half a recommendation applied is a grip nobody
+                // fitted: one hand moved to suit the cuts and the other left where it was.
+                if (show && toLeft.HasValue && toRight.HasValue)
+                {
+                    Advice.Recommended = new Advice.Recommendation
+                    {
+                        Left = toLeft.Value,
+                        Right = toRight.Value,
+                        WasLeft = group.Epoch.LeftRotation,
+                        WasRight = group.Epoch.RightRotation,
+                        AlternativeHandling = group.Epoch.AlternativeHandling,
+                    };
+                }
                 soFar += leftCuts.Count + rightCuts.Count;
                 advised |= show;
                 Advice.Publish();
@@ -633,14 +650,15 @@ namespace ControllerAutoAdjust
             };
         }
 
-        private static void Report(
+        /// <summary>Fit one hand, and hand back the setting if it is worth acting on.</summary>
+        private static Vector3? Report(
             string name, List<CutSample> cuts, Vector3 current, bool left,
             OffsetJournal.Epoch epoch, bool trusted, bool show, float from, float span)
         {
             if (cuts.Count == 0)
             {
                 Plugin.Log.Info($"{name}: no cuts");
-                return;
+                return null;
             }
 
             var hand = name.Trim();
@@ -670,7 +688,7 @@ namespace ControllerAutoAdjust
             // largest first, making the last the smallest -- exactly the one too thin to act on.
             if (!show)
             {
-                return;
+                return null;
             }
             var line = trusted
                 ? $"{hand}: {current} -> {found.Setting}, worth {found.GainFraction:P2}"
@@ -683,6 +701,7 @@ namespace ControllerAutoAdjust
             {
                 Advice.Right = line;
             }
+            return trusted ? found.Setting : (Vector3?)null;
         }
 
         /// <summary>Replay folders: this install's, plus any the player has listed.</summary>

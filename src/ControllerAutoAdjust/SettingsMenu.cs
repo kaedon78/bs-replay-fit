@@ -48,7 +48,7 @@ namespace ControllerAutoAdjust
                      {
                          nameof(Status), nameof(EvidenceLine), nameof(Advisory), nameof(AssignmentList), nameof(StartPercent), nameof(EndPercent),
                          nameof(ReadButton), nameof(FitButton),
-                         nameof(ProfileChoices), nameof(Profile),
+                         nameof(ProfileChoices), nameof(Profile), nameof(TargetChoices), nameof(Target),
                          nameof(TimelineRow), nameof(ActionNote),
                          nameof(FromLabel), nameof(UntilLabel), nameof(ProfileLabel),
                      })
@@ -236,6 +236,76 @@ namespace ControllerAutoAdjust
         }
 
         private static bool Near(Vector3 a, Vector3 b) => (a - b).sqrMagnitude < 1e-4f;
+
+        /// <summary>
+        /// The profiles a fitted grip can be written into.
+        /// </summary>
+        /// <remarks>
+        /// Modifiable ones only. The built-in profile refuses edits, and offering it would
+        /// produce a button that reports success and changes nothing. Unlike the range
+        /// picker, an all-default profile is offered here: an empty slot is exactly where a
+        /// player would want a fitted grip to land.
+        /// </remarks>
+        private static List<ControllerProfile> Writable()
+        {
+            var writable = new List<ControllerProfile>();
+            foreach (var profile in SettingsWatcher.Profiles)
+            {
+                if (profile != null && profile.modifiable)
+                {
+                    writable.Add(profile);
+                }
+            }
+            return writable;
+        }
+
+        private static string Name(ControllerProfile profile) =>
+            $"#{profile.index + 1}  {Describe(profile)}";
+
+        [UIValue("target-choices")]
+        public List<object> TargetChoices
+        {
+            get
+            {
+                var choices = new List<object>();
+                foreach (var profile in Writable())
+                {
+                    choices.Add(Name(profile));
+                }
+                if (choices.Count == 0)
+                {
+                    choices.Add("No editable profile");
+                }
+                return choices;
+            }
+        }
+
+        private string _target = "";
+
+        [UIValue("target")]
+        public string Target
+        {
+            get
+            {
+                var writable = Writable();
+                foreach (var profile in writable)
+                {
+                    if (Name(profile) == _target)
+                    {
+                        return _target;
+                    }
+                }
+                // Default to the one being played on, when it is one that can be written to.
+                var model = SettingsWatcher.Model;
+                if (model != null && model.selectedProfile != null
+                    && model.selectedProfile.modifiable)
+                {
+                    return Name(model.selectedProfile);
+                }
+                return writable.Count > 0 ? Name(writable[0]) : "No editable profile";
+            }
+            set => _target = value;
+        }
 
         private static string Describe(ControllerProfile profile) =>
             $"L {Short(profile.leftController.rotation)}  " +
@@ -461,6 +531,103 @@ namespace ControllerAutoAdjust
             Advice.Publish();
         }
 
+        /// <summary>
+        /// Write the fitted grip into a profile, select it, and record that it happened.
+        /// </summary>
+        /// <remarks>
+        /// Selecting it is part of the job rather than an extra liberty. Written into a
+        /// profile the player is not on, the numbers change nothing they can feel, and a
+        /// button that reports success while play is unchanged is worse than one that does
+        /// nothing at all.
+        ///
+        /// Recording it is the half that makes the next fit possible. Every replay from here
+        /// belongs to a different grip than the ones behind the advice, and a journal entry
+        /// is the only thing that says where the boundary falls; without it, the next fit
+        /// pools both and quietly fits a compromise.
+        /// </remarks>
+        [UIAction("apply")]
+        public void ApplyRecommendation()
+        {
+            var advice = Advice.Recommended;
+            if (advice == null)
+            {
+                Advice.Note = "Nothing fitted yet to apply.";
+                Advice.Publish();
+                return;
+            }
+            var model = SettingsWatcher.Model;
+            ControllerProfile target = null;
+            foreach (var profile in Writable())
+            {
+                if (Name(profile) == Target)
+                {
+                    target = profile;
+                    break;
+                }
+            }
+            if (model == null || target == null)
+            {
+                Advice.Note = "No editable profile to write to.";
+                Advice.Publish();
+                return;
+            }
+
+            var before = $"L {Short(target.leftController.rotation)} "
+                         + $"R {Short(target.rightController.rotation)}";
+
+            // Rotation only. The fit moves the blade by turning the controller; the position
+            // is the player's own and nothing here measured it.
+            target.UpdateControllerOffset(true, target.leftController.position, advice.Left);
+            target.UpdateControllerOffset(false, target.rightController.position, advice.Right);
+
+            // The search composed each candidate under this flag to decide where the blade
+            // lands, so the profile has to agree with it or the numbers mean something else.
+            var handlingMoved = target.alternativeHandling != advice.AlternativeHandling;
+            if (handlingMoved)
+            {
+                target.SetRotateThanMove(advice.AlternativeHandling);
+            }
+
+            var wasSelected = model.selectedProfile == target;
+            if (!wasSelected)
+            {
+                // Its position in the list, not its own index. Built-in and custom profiles
+                // number themselves separately, so profile.index is not a place in the list
+                // and selecting by it lands on the wrong profile.
+                var at = -1;
+                for (var i = 0; i < model.profiles.Count; i++)
+                {
+                    if (model.profiles[i] == target)
+                    {
+                        at = i;
+                        break;
+                    }
+                }
+                if (at >= 0)
+                {
+                    model.UpdateSelectedProfile(at);
+                }
+            }
+            model.SaveAsync();
+
+            Plugin.Log.Info(
+                $"applied to profile #{target.index + 1}: {before} -> "
+                + $"L {Short(advice.Left)} R {Short(advice.Right)}"
+                + (handlingMoved ? $", handling set to {advice.AlternativeHandling}" : "")
+                + (wasSelected ? "" : ", and selected it"));
+
+            // A frame or two late: the write refreshes the controllers, and the poses the
+            // journal reads are last frame's until it has.
+            _journalIn = 4;
+
+            Advice.Note = $"Applied to profile #{target.index + 1}"
+                          + (wasSelected ? "." : " and switched to it.")
+                          + (handlingMoved ? " Rotate-then-move set to match the fit." : "");
+            Advice.Publish();
+        }
+
+        private int _journalIn = -1;
+
         [UIAction("clear-assignments")]
         public void ClearAssignments()
         {
@@ -595,6 +762,15 @@ namespace ControllerAutoAdjust
         [UIObject("advisory-row")]
         private GameObject _advisoryRow;
 
+        [UIComponent("apply-button")]
+        private Button _applyButton;
+
+        [UIComponent("target-list")]
+        private ListSetting _targetList;
+
+        [UIObject("apply-row")]
+        private GameObject _applyRow;
+
         /// <summary>
         /// The buttons, so they can be greyed rather than merely labelled.
         /// </summary>
@@ -687,7 +863,8 @@ namespace ControllerAutoAdjust
         {
             var shown = string.Concat(
                 fitting ? "f" : "-",
-                Active(_fitStatusRow), Active(_fitProgressRow), Active(_advisoryRow));
+                Active(_fitStatusRow), Active(_fitProgressRow), Active(_advisoryRow),
+                Active(_applyRow));
             if (shown != _rowsShown)
             {
                 _rowsShown = shown;
@@ -750,6 +927,19 @@ namespace ControllerAutoAdjust
             Show(_noteRow, ActionNote);
             Show(_advisoryRow, Advisory);
 
+            // Both hidden until there is something to apply. A picker and a button that can
+            // only report having nothing to do are two more rows of a panel saying no.
+            var ready = Advice.Recommended != null && !Recommender.Running;
+            Show(_applyRow, ready);
+            if (_targetList != null)
+            {
+                _targetList.gameObject.SetActive(ready);
+            }
+            if (_applyButton != null)
+            {
+                _applyButton.interactable = ready;
+            }
+
             if (_readButton != null)
             {
                 _readButton.interactable = !Recommender.Running;
@@ -780,6 +970,10 @@ namespace ControllerAutoAdjust
             Fill(_fill);
             Fill(_fitFill);
             KeepTheFitInView(fitting);
+            if (_journalIn >= 0 && _journalIn-- == 0)
+            {
+                SettingsWatcher.CaptureNow();
+            }
         }
 
         private static void Fill(Image bar)
@@ -953,6 +1147,40 @@ namespace ControllerAutoAdjust
 
         /// <summary>Runs with no recorded settings, which are the only ones the panel governs.</summary>
         internal static volatile int UnknownRuns;
+
+        /// <summary>
+        /// The numbers behind the advice, kept so a button can act on them.
+        /// </summary>
+        /// <remarks>
+        /// The panel showed the fit as a sentence, which is enough to read and retype and
+        /// nothing else. Held as one object assigned whole, rather than a field per hand,
+        /// because the fit runs on a worker: a reader either has the whole recommendation or
+        /// the previous one, never half of each.
+        ///
+        /// Null until a fit produces something worth acting on, which is what the apply
+        /// button is enabled by. A group too thin to recommend leaves it null even though
+        /// there are numbers to show.
+        /// </remarks>
+        internal class Recommendation
+        {
+            public Vector3 Left;
+            public Vector3 Right;
+            public Vector3 WasLeft;
+            public Vector3 WasRight;
+
+            /// <summary>
+            /// The handling the fit assumed, which the applied profile has to match.
+            /// </summary>
+            /// <remarks>
+            /// The search composes a candidate with the legacy offset and this flag to work
+            /// out where the blade lands. Written into a profile set the other way, the same
+            /// three numbers put the blade somewhere else, and the result would be a
+            /// recommendation that measurably makes things worse.
+            /// </remarks>
+            public bool AlternativeHandling;
+        }
+
+        internal static volatile Recommendation Recommended;
 
         /// <summary>Bumped whenever any of the above changes, so the menu can notice.</summary>
         internal static volatile int Version;

@@ -131,6 +131,21 @@ namespace ControllerAutoAdjust
 
         private static ControllerProfilesModel _shared;
 
+        /// <summary>The profiles model itself, for writing a fitted grip into a profile.</summary>
+        internal static ControllerProfilesModel Model => _shared;
+
+        /// <summary>
+        /// Journal the live settings now, rather than waiting to be told.
+        /// </summary>
+        /// <remarks>
+        /// The hooks cover a player editing settings in the game's own screens. A write from
+        /// this mod goes through the same model and should raise the same event, but a
+        /// journal entry is what ties every future replay to the grip it was played on, and
+        /// an epoch that is merely likely to have been recorded is not good enough. Appending
+        /// is conditional on an actual change, so asking twice costs nothing.
+        /// </remarks>
+        internal static void CaptureNow() => Capture();
+
         private static void Capture()
         {
             if (OffsetState.TryRead(out var reading))

@@ -95,4 +95,16 @@
     <text text='~advisory' align='Center' font-size='3.2'/>
   </horizontal>
 
+  <!-- Applying is a press, never a consequence of fitting. The fit is cheap and worth
+       re-running with a different range; changing the grip out from under a player who was
+       only comparing answers is not something they asked for. -->
+  <list-setting id='target-list' text='4. Save the fit to profile' value='target'
+                choices='target-choices' apply-on-change='true'
+                hover-hint='Which profile the fitted numbers are written into. It becomes the profile in use.'/>
+
+  <horizontal id='apply-row' pref-height='8' pref-width='90'>
+    <action-button id='apply-button' text='4. Apply and switch to it' on-click='apply'
+            hover-hint='Writes the fit into that profile, switches to it, and records the change so later replays are tied to it.'/>
+  </horizontal>
+
 </settings-container>
