@@ -71,6 +71,18 @@ namespace ControllerAutoAdjust
 
         internal static bool Running => _running;
 
+        /// <summary>Which step the panel is on, so its status can sit beside that step.</summary>
+        /// <remarks>
+        /// Kept after the step finishes rather than reset to none: the line a step leaves
+        /// behind belongs where the step was, and moving it back to the top the moment the
+        /// worker exits would take the answer away from the button that produced it.
+        /// </remarks>
+        internal enum Step { None, Reading, Fitting }
+
+        private static volatile Step _step = Step.None;
+
+        internal static Step Phase => _step;
+
         internal static int RunsRead => _read.Count;
 
         internal static bool HasRead => _read.Count > 0;
@@ -90,10 +102,10 @@ namespace ControllerAutoAdjust
         }
 
         /// <summary>Step one: read the replays. Slow, and only needed once.</summary>
-        internal static bool BeginRead() => Start(reading => Read(reading));
+        internal static bool BeginRead() => Start(Step.Reading, reading => Read(reading));
 
         /// <summary>Step three: fit both hands to whatever step one read.</summary>
-        internal static bool BeginFit() => Start(reading => Fit(reading));
+        internal static bool BeginFit() => Start(Step.Fitting, reading => Fit(reading));
 
         /// <summary>
         /// Run a step on a worker, having read the live settings on the main thread.
@@ -102,12 +114,13 @@ namespace ControllerAutoAdjust
         /// The settings hang off Unity objects, so they are captured here and the worker never
         /// touches the scene.
         /// </remarks>
-        private static bool Start(Action<OffsetState.Reading> step)
+        private static bool Start(Step phase, Action<OffsetState.Reading> step)
         {
             if (_running || !OffsetState.TryRead(out var reading))
             {
                 return false;
             }
+            _step = phase;
             _running = true;
             _worker = new Thread(() =>
             {

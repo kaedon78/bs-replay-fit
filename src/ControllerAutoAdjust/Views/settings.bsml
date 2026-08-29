@@ -79,6 +79,18 @@
             hover-hint='Fits both hands to the range above. Fast, so change the range and refit freely.'/>
   </horizontal>
 
+  <!-- The same pair as at the top, under the button that drives them. A fit's progress
+       and the line it leaves behind belong beside the fit, not four rows above it; the two
+       are one row apart in the layout and only ever one of them is on screen. -->
+  <horizontal id='fit-status-row' pref-height='6' pref-width='90'>
+    <text text='~status' align='Center' font-size='3.2'/>
+  </horizontal>
+
+  <horizontal id='fit-progress-row' pref-height='4' pref-width='80' bg='panel-top'>
+    <image id='fit-progress-fill' src='#RoundRect10' pref-height='3' pref-width='78'
+           image-color='#4af'/>
+  </horizontal>
+
   <horizontal id='advisory-row' pref-height='9' pref-width='90'>
     <text text='~advisory' align='Center' font-size='3.2'/>
   </horizontal>

@@ -571,6 +571,15 @@ namespace ControllerAutoAdjust
         [UIObject("status-row")]
         private GameObject _statusRow;
 
+        [UIComponent("fit-progress-fill")]
+        private Image _fitFill;
+
+        [UIObject("fit-progress-row")]
+        private GameObject _fitProgressRow;
+
+        [UIObject("fit-status-row")]
+        private GameObject _fitStatusRow;
+
         [UIObject("timeline-row")]
         private GameObject _timelineRow;
 
@@ -667,11 +676,14 @@ namespace ControllerAutoAdjust
 
         internal void DrawProgress()
         {
-            if (_progressRow != null)
-            {
-                _progressRow.SetActive(Recommender.Running);
-            }
-            Show(_statusRow, Status);
+            // Each step's own pair. Which one is on is the step's, not a preference: the
+            // line a step leaves behind stays where the step was, so the answer sits under
+            // the button that produced it rather than jumping back to the top of the panel.
+            var fitting = Recommender.Phase == Recommender.Step.Fitting;
+            Show(_progressRow, Recommender.Running && !fitting);
+            Show(_fitProgressRow, Recommender.Running && fitting);
+            Show(_statusRow, Status.Length > 0 && !fitting);
+            Show(_fitStatusRow, Status.Length > 0 && fitting);
             Show(_timelineRow, Advice.Sessions.Count > 0);
             Show(_assignmentsRow, AssignmentList);
             Show(_evidenceRow, EvidenceLine);
@@ -705,17 +717,23 @@ namespace ControllerAutoAdjust
             {
                 _profileList.Interactable = needed;
             }
-            if (_fill == null)
+            Fill(_fill);
+            Fill(_fitFill);
+        }
+
+        private static void Fill(Image bar)
+        {
+            if (bar == null)
             {
                 return;
             }
-            if (_fill.type != Image.Type.Filled)
+            if (bar.type != Image.Type.Filled)
             {
-                _fill.type = Image.Type.Filled;
-                _fill.fillMethod = Image.FillMethod.Horizontal;
-                _fill.fillOrigin = (int)Image.OriginHorizontal.Left;
+                bar.type = Image.Type.Filled;
+                bar.fillMethod = Image.FillMethod.Horizontal;
+                bar.fillOrigin = (int)Image.OriginHorizontal.Left;
             }
-            _fill.fillAmount = Mathf.Clamp01(Advice.Progress);
+            bar.fillAmount = Mathf.Clamp01(Advice.Progress);
         }
 
         [UIValue("analyse-button")]
