@@ -76,11 +76,23 @@ namespace ControllerAutoAdjust
         }
 
         /// <summary>Distance from centre this cut would have had, under a saber-frame turn.</summary>
+        /// <remarks>
+        /// The sign is the whole content of this function and was wrong for a long time.
+        /// Turning the saber by a small local rotation t moves a point a distance L along the
+        /// blade by <c>t x (0,0,L)</c>, which is <c>L(ty, -tx, 0)</c>; along the cut normal m
+        /// that is <c>L(ty*mx - tx*my)</c>. The cut point moves and the note does not, so the
+        /// gap between them changes by the negative of that, leaving a plus here.
+        ///
+        /// Subtracting instead returns the exact negative of the right answer, because the
+        /// shift is linear in the turn. It does not look like a failure: the search still
+        /// converges, still reports a gain, and recommends moving the grip as far the wrong
+        /// way as it should have moved the right way. Nothing internal can catch it, which is
+        /// why <see cref="SearchSelfTest"/> now builds a cut by moving a saber in three
+        /// dimensions and checks this against it.
+        /// </remarks>
         internal static float DistanceUnder(CutSample c, Vector2 turn)
         {
-            // Rotating the saber by a small turn moves the plane by reach * (tx*my - ty*mx);
-            // a translation's effect would be flat in reach, which is what separates them.
-            var moved = c.Signed - c.Lever * (turn.x * c.AcrossY - turn.y * c.AcrossX);
+            var moved = c.Signed + c.Lever * (turn.x * c.AcrossY - turn.y * c.AcrossX);
             return Mathf.Abs(moved);
         }
 
@@ -98,7 +110,7 @@ namespace ControllerAutoAdjust
             var total = 0f;
             for (var i = 0; i < signed.Length; i++)
             {
-                var moved = signed[i] - (turn.x * alongY[i] + turn.y * alongX[i]);
+                var moved = signed[i] + (turn.x * alongY[i] + turn.y * alongX[i]);
                 total += weight[i] * AccuracyPoints(moved < 0f ? -moved : moved);
             }
             return total;
@@ -128,7 +140,7 @@ namespace ControllerAutoAdjust
         /// </remarks>
         internal static Vector2 FitTurn(IReadOnlyList<CutSample> cuts)
         {
-            // Normal equations for signed ~ lever * (tx*my - ty*mx), weighted by multiplier.
+            // Normal equations for -signed ~ lever * (tx*my - ty*mx), weighted by multiplier.
             double axx = 0, axy = 0, ayy = 0, bx = 0, by = 0;
             for (var i = 0; i < cuts.Count; i++)
             {
@@ -139,8 +151,10 @@ namespace ControllerAutoAdjust
                 axx += w * u * u;
                 axy += w * u * v;
                 ayy += w * v * v;
-                bx += w * u * c.Signed;
-                by += w * v * c.Signed;
+                // Against the negated distance, matching DistanceUnder: the turn wanted is
+                // the one whose shift cancels the gap, not the one that reproduces it.
+                bx -= w * u * c.Signed;
+                by -= w * v * c.Signed;
             }
             var det = axx * ayy - axy * axy;
             if (System.Math.Abs(det) < 1e-12)

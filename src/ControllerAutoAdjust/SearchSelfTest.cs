@@ -48,9 +48,103 @@ namespace ControllerAutoAdjust
             ok &= Equivalent("one degree of Y is not free", new Vector3(49f, -9f, -6f),
                              new Vector3(49f, -8f, -6f), false, expectSame: false);
 
+            ok &= MovesTheRightWay("a turned saber cuts where the geometry says, right", false);
+            ok &= MovesTheRightWay("a turned saber cuts where the geometry says, left", true);
+
             Plugin.Log.Info(ok ? "search self-test: PASS" : "search self-test: FAIL");
             return ok;
         }
+
+        /// <summary>
+        /// Check the cut model against a saber actually moved in three dimensions.
+        /// </summary>
+        /// <remarks>
+        /// Every other case here builds its cuts with the same functions it then verifies, so
+        /// a sign error cancels and they all pass. One did, for the whole life of the offline
+        /// version and the port of it: the predicted shift was subtracted where it should
+        /// have been added, which returns the exact negative of the right answer, and a
+        /// search that recommends moving the grip as far the wrong way as it should have gone
+        /// the right way still converges and still reports a gain.
+        ///
+        /// So this builds a cut without asking the model anything. It puts a saber in the
+        /// world under one setting, works out where the note sits relative to the blade,
+        /// turns the saber to a second setting, and measures the gap again by rotating
+        /// vectors. Only then does it ask <see cref="OffsetSearch.DistanceUnder"/> what it
+        /// thinks, and the two have to agree.
+        ///
+        /// The tolerance is loose against the linearisation and tight against the failure.
+        /// Over these turns the second-order term dropped by the model is worth about 3 mm
+        /// at worst, against a shift of up to 30 mm; the sign this exists to catch inverts
+        /// that shift and so lands about 60 mm out. Five millimetres is clear of the
+        /// approximation and an order of magnitude inside the bug.
+        /// </remarks>
+        private static bool MovesTheRightWay(string name, bool left)
+        {
+            const float Tolerance = 0.005f;
+            var rng = new System.Random(90210);
+            var worst = 0f;
+            var largestShift = 0f;
+
+            for (var trial = 0; trial < 40; trial++)
+            {
+                // A root pose that is not the identity, since it has to cancel.
+                var root = Quaternion.Euler(
+                    Range(rng, -25f, 25f), Range(rng, -40f, 40f), Range(rng, -15f, 15f));
+                var current = new Vector3(
+                    Range(rng, 35f, 52f), Range(rng, -12f, 4f), Range(rng, -8f, 8f));
+                var candidate = current + new Vector3(
+                    Range(rng, -2f, 2f), Range(rng, -2f, 2f), Range(rng, -2f, 2f));
+
+                var before = root * OffsetMath.Applied(current, left, Vector3.zero, true);
+                var after = root * OffsetMath.Applied(candidate, left, Vector3.zero, true);
+
+                // The grip stays put: only the rotation is being changed.
+                var grip = new Vector3(Range(rng, -.3f, .3f), Range(rng, .8f, 1.3f),
+                                       Range(rng, -.2f, .2f));
+                var centre = grip + before * new Vector3(
+                    Range(rng, -.06f, .06f), Range(rng, -.06f, .06f), Range(rng, .6f, 1.0f));
+
+                // The cut plane contains the blade, so its normal lies across it, and it is
+                // carried by the saber rather than fixed in the world.
+                var across = new Vector3(
+                    Range(rng, -1f, 1f), Range(rng, -1f, 1f), Range(rng, -.15f, .15f))
+                    .normalized;
+
+                var bladeBefore = before * Vector3.forward;
+                var bladeAfter = after * Vector3.forward;
+                var lever = Vector3.Dot(centre - grip, bladeBefore);
+
+                var signedBefore = Vector3.Dot(
+                    centre - grip - lever * bladeBefore, before * across);
+                var signedAfter = Vector3.Dot(
+                    centre - grip - lever * bladeAfter, after * across);
+
+                var sample = new CutSample
+                {
+                    Signed = signedBefore,
+                    AcrossX = across.x,
+                    AcrossY = across.y,
+                    Lever = lever,
+                    Multiplier = 1,
+                };
+                var turn = OffsetMath.TurnVector(
+                    current, candidate, left, Vector3.zero, true);
+                var predicted = OffsetSearch.DistanceUnder(sample, turn);
+
+                worst = Mathf.Max(worst, Mathf.Abs(predicted - Mathf.Abs(signedAfter)));
+                largestShift = Mathf.Max(largestShift, Mathf.Abs(signedAfter - signedBefore));
+            }
+
+            var pass = worst <= Tolerance;
+            Plugin.Log.Info(
+                $"  {name}: worst error {worst * 1000f:F2} mm over 40 turns "
+                + $"moving cuts by up to {largestShift * 1000f:F0} mm "
+                + $"-> {(pass ? "ok" : "FAILED")}");
+            return pass;
+        }
+
+        private static float Range(System.Random rng, float lo, float hi) =>
+            lo + (float)rng.NextDouble() * (hi - lo);
 
         /// <summary>
         /// How much two settings actually differ, in the only terms that matter.
@@ -135,8 +229,10 @@ namespace ControllerAutoAdjust
                     AcrossY = my,
                     Lever = lever,
                     Multiplier = 8,
-                    // Arranged so that applying `wanted` leaves only the residual.
-                    Signed = residual + lever * (wanted.x * my - wanted.y * mx),
+                    // Arranged so that applying `wanted` leaves only the residual. The
+                    // sign follows DistanceUnder, which adds the shift: a cut the turn is
+                    // meant to fix must start displaced the other way.
+                    Signed = residual - lever * (wanted.x * my - wanted.y * mx),
                 });
             }
             return cuts;
