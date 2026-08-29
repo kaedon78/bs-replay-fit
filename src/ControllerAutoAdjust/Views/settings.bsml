@@ -2,9 +2,20 @@
                     xsi:noNamespaceSchemaLocation='https://raw.githubusercontent.com/monkeymanboy/BSML-Docs/gh-pages/BSMLSchema.xsd'>
 
   <!-- Wrapped with an explicit height. A bare text reports no preferred height, so the
-       container hands it everything left over and the controls end up below the fold. -->
-  <horizontal pref-height='9' pref-width='90'>
+       container hands it everything left over and the controls end up below the fold.
+
+       Height for two lines and then some: a text overflowing its box is centred on the box,
+       so it spills equally above and below, and the half above the first row is outside the
+       scroll viewport entirely. There is no scrolling up to reach it. -->
+  <horizontal pref-height='11' pref-width='90'>
     <text text='~status' align='Center' font-size='3.2'/>
+  </horizontal>
+
+  <!-- Monospaced, so the bars sit under one another rather than drifting with glyph width,
+       and at a cell narrow enough that the row can afford enough bars to show the shape of
+       a history rather than one bar per month. -->
+  <horizontal pref-height='8' pref-width='90'>
+    <text text='~timeline' align='Center' font-size='2.2' rich-text='true'/>
   </horizontal>
 
   <!-- Hidden unless something is running; the fill is driven from code, since BSML has no
@@ -19,25 +30,34 @@
             hover-hint='Reads your replay files. Slow, and only needed once per session.'/>
   </horizontal>
 
-  <horizontal pref-height='8' pref-width='90'>
+  <horizontal pref-height='7' pref-width='90'>
     <text text='~scope' align='Center' font-size='2.9'/>
+  </horizontal>
+
+  <!-- The ranges already assigned, above the controls that add another. They are the state
+       the rest of the panel builds on, and below the buttons they were off the bottom of the
+       viewport, so a panel at its resting scroll position said nothing about what had been
+       assigned to it. -->
+  <horizontal pref-height='12' pref-width='90'>
+    <text text='~assignments' align='Center' font-size='2.9'/>
   </horizontal>
 
   <!-- apply-on-change, on all three, because these are not preferences: the Assign button
        below reads them. BSML writes a setting back to its host on the screen's OK event
        unless told otherwise, so without this the button read the range and profile from
-       before the player set them -- and with nothing ever written, it looked inert. -->
-  <slider-setting id='from-slider' text='2. Earlier replays: from' value='start-percent'
+       before the player set them, and with nothing ever written, it looked inert. -->
+  <slider-setting id='from-slider' text='~from-label' value='start-percent'
                   min='0' max='100' increment='2' integer-only='true'
                   formatter='format-session' apply-on-change='true'
                   hover-hint='Applies only to runs from before this mod was installed. Runs it has a record for are unaffected.'/>
 
-  <slider-setting id='until-slider' text='2. Earlier replays: until' value='end-percent'
+  <slider-setting id='until-slider' text='~until-label' value='end-percent'
                   min='0' max='100' increment='2' integer-only='true'
                   formatter='format-session' apply-on-change='true'
                   hover-hint='Applies only to runs from before this mod was installed.'/>
 
-  <list-setting id='profile-list' text='2. Earlier replays were played on' value='profile' choices='profile-choices' apply-on-change='true'
+  <list-setting id='profile-list' text='~profile-label' value='profile'
+                choices='profile-choices' apply-on-change='true'
                 hover-hint='Which controller profile was in use for that range. Replays do not record it.'/>
 
   <horizontal pref-height='7' pref-width='90' spacing='2'>
@@ -47,8 +67,8 @@
             hover-hint='Forget every assigned range.'/>
   </horizontal>
 
-  <horizontal pref-height='12' pref-width='90'>
-    <text text='~assignments' align='Center' font-size='2.9'/>
+  <horizontal pref-height='5' pref-width='90'>
+    <text text='~note' align='Center' font-size='2.9'/>
   </horizontal>
 
   <horizontal pref-height='8' pref-width='90'>

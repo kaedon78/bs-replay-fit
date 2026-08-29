@@ -49,6 +49,8 @@ namespace ControllerAutoAdjust
                          nameof(Status), nameof(Scope), nameof(Advisory), nameof(AssignmentList), nameof(StartPercent), nameof(EndPercent),
                          nameof(ReadButton), nameof(FitButton),
                          nameof(ProfileChoices), nameof(Profile),
+                         nameof(TimelineRow), nameof(ActionNote),
+                         nameof(FromLabel), nameof(UntilLabel), nameof(ProfileLabel),
                      })
             {
                 changed(this, new PropertyChangedEventArgs(name));
@@ -448,18 +450,17 @@ namespace ControllerAutoAdjust
         {
             get
             {
-                var note = Advice.Note.Length > 0 ? Advice.Note + "\n" : "";
                 var list = Preferences.Assignments;
                 if (!Recommender.HasRead)
                 {
-                    return note;
+                    return "";
                 }
                 if (list.Count == 0)
                 {
-                    return note + (Advice.UnknownRuns == 0
+                    return Advice.UnknownRuns == 0
                         ? ""
                         : $"No ranges assigned, so none of those {Advice.UnknownRuns} runs "
-                          + "will be used.");
+                          + "will be used.";
                 }
 
                 // Each line carries how many runs it actually covers. A range that reads
@@ -472,7 +473,7 @@ namespace ControllerAutoAdjust
                               + $"L {Short(a.LeftRotation)} R {Short(a.RightRotation)}  "
                               + $"[{Recommender.RunsCoveredBy(a)} runs]");
                 }
-                return note + string.Join("\n", lines);
+                return string.Join("\n", lines);
             }
         }
 
@@ -640,8 +641,37 @@ namespace ControllerAutoAdjust
 
         [UIValue("status")]
         public string Status => Advice.Summary
-            + (Timeline.Length > 0 ? "\n" + Timeline : "")
             + (Advice.Evidence.Length > 0 ? "\n" + Advice.Evidence : "");
+
+        /// <summary>
+        /// The range being described right now, so the labels say which one they build.
+        /// </summary>
+        /// <remarks>
+        /// Three controls and a button add one segment at a time, and nothing on screen said
+        /// so: the fields read as the only range there was, rather than as the next one.
+        /// </remarks>
+        private static int NextRange => Preferences.Assignments.Count + 1;
+
+        [UIValue("from-label")]
+        public string FromLabel => $"Range {NextRange}: Replays starting";
+
+        [UIValue("until-label")]
+        public string UntilLabel => $"Range {NextRange}: Replays ending";
+
+        [UIValue("profile-label")]
+        public string ProfileLabel => $"Range {NextRange}: Controller settings used";
+
+        /// <summary>The last thing a button did, kept next to the buttons.</summary>
+        /// <remarks>
+        /// Was folded into the assignment list, which now sits near the top of the panel
+        /// where the assigned ranges are visible without scrolling. Feedback for a press
+        /// belongs where the finger is, so the two were separated.
+        /// </remarks>
+        [UIValue("note")]
+        public string ActionNote => Advice.Note;
+
+        [UIValue("timeline")]
+        public string TimelineRow => Timeline;
 
         [UIValue("advisory")]
         public string Advisory =>
@@ -657,11 +687,13 @@ namespace ControllerAutoAdjust
                 {
                     return "";
                 }
-                // Bucketed to a fixed width rather than one glyph per session. A glyph each
-                // made the line forty characters wide, and the container sizes itself to its
-                // widest child -- so the chart quietly stretched the panel until the labels
-                // ran off the left edge.
-                const int Columns = 16;
+                // Bucketed to a fixed width rather than one glyph per session, because the
+                // container sizes itself to its widest child and an unbounded chart stretched
+                // the panel until the labels ran off the left edge. Sixteen columns fitted and
+                // said little: months of history per bar hides every gap worth seeing. The row
+                // is monospaced in the markup instead, at a cell narrow enough to afford this
+                // many and still line the bars up under one another.
+                const int Columns = 40;
                 const string Blocks = "▁▂▃▅▆▇█";
                 var totals = new int[Columns];
                 var first = sessions[0].Start;
@@ -685,7 +717,11 @@ namespace ControllerAutoAdjust
                             Mathf.RoundToInt((float)totals[i] / most * (Blocks.Length - 1)),
                             0, Blocks.Length - 1)];
                 }
-                return $"{first:MMM d} {new string(bar)} {sessions[sessions.Count - 1].Start:MMM d}";
+                // Bars on their own line at a fixed cell width, dates beneath. Sharing a
+                // line with the dates left about two thirds of the row for the chart,
+                // which is what held the column count down.
+                return $"<mspace=2>{new string(bar)}</mspace>\n"
+                       + $"{first:MMM d} to {sessions[sessions.Count - 1].Start:MMM d}";
             }
         }
 

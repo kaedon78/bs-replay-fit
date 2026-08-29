@@ -7,4 +7,19 @@
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
   </ItemGroup>
 
+  <!--
+    A malformed .bsml does not fail the build. It is an embedded resource, so it is copied
+    verbatim, and the parse happens in the game: the panel is replaced by "error loading
+    settings" and the reason is a stack trace in the game log. Two launches were spent that
+    way on an em dash inside an XML comment, which is illegal and looks like prose.
+
+    XmlPeek parses the file, so it is enough to make the build the place that finds out.
+  -->
+  <Target Name="ValidateBsml" BeforeTargets="CoreCompile"
+          Inputs="@(EmbeddedResource)" Outputs="$(IntermediateOutputPath)bsml.validated">
+    <XmlPeek XmlInputPath="%(EmbeddedResource.FullPath)" Query="/*"
+             Condition="'%(Extension)' == '.bsml'" />
+    <Touch Files="$(IntermediateOutputPath)bsml.validated" AlwaysCreate="true" />
+  </Target>
+
 </Project>
