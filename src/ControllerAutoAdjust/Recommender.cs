@@ -98,6 +98,8 @@ namespace ControllerAutoAdjust
                 var used = 0;
                 var skipped = 0;
                 var unknownEpoch = 0;
+                var outsideRange = 0;
+                var everySession = new List<DateTime>();
                 var speeds = new List<float>();
                 var residuals = new List<float>();
 
@@ -144,14 +146,35 @@ namespace ControllerAutoAdjust
                     }
                     cuts.Played = when;
                     cuts.FromJournal = fromJournal;
+                    everySession.Add(when.Date);
+
+                    // The range is the player's word about history the journal cannot vouch
+                    // for. Replays it does cover are recorded fact and are not up for a vote.
+                    if (!fromJournal && !Preferences.InRange(when))
+                    {
+                        outsideRange++;
+                        continue;
+                    }
                     Bucket(groups, epoch).Add(cuts);
                     speeds.Add(cuts.Left.NoteSpeed);
                     residuals.Add(cuts.Left.MedianResidual);
                     used++;
                 }
 
+                // Published before the range is applied, so the sliders span the whole
+                // history and a narrowed range can always be widened again.
+                Advice.Sessions = everySession
+                    .GroupBy(d => d)
+                    .OrderBy(g => g.Key)
+                    .Select(g => new KeyValuePair<DateTime, int>(g.Key, g.Count()))
+                    .ToList();
+
                 Plugin.Log.Info(
-                    $"replays: {used} used, {skipped} skipped, of {files.Count} found");
+                    $"replays: {used} used, {skipped} skipped, of {files.Count} found"
+                    + (outsideRange > 0 ? $"; {outsideRange} outside the chosen date range" : ""));
+                Advice.Summary = outsideRange > 0
+                    ? $"{used - outsideRange} replays in range, {outsideRange} excluded by it."
+                    : $"{used} replays read, {skipped} skipped.";
                 if (unknownEpoch > 0)
                 {
                     Plugin.Log.Warn(
@@ -204,15 +227,6 @@ namespace ControllerAutoAdjust
         /// </remarks>
         private static void CheckTheAssumption(List<ReplayCuts.Extraction> runs)
         {
-            var answer = Preferences.PriorReplayAnswer;
-            if (answer == Preferences.PriorReplays.DifferentConfig)
-            {
-                Plugin.Log.Warn(
-                    $"{runs.Count} replays predate the journal and you have said they were " +
-                    "played on different settings, so they are reported but not recommended from");
-                return;
-            }
-
             var sessions = runs
                 .GroupBy(r => r.Played.Date)
                 .Where(g => g.Count() >= 2)
@@ -232,6 +246,11 @@ namespace ControllerAutoAdjust
                     "whether the settings held steady across them");
                 return;
             }
+            Advice.Evidence = verdict.Split
+                ? $"These replays do not look like one grip: the residual shifts "
+                  + $"{verdict.GapDegrees:F1} deg around {verdict.At:yyyy-MM-dd}."
+                : $"{verdict.Sessions} earlier sessions look consistent "
+                  + $"(largest shift {verdict.GapDegrees:F1} deg).";
             if (verdict.Split)
             {
                 Plugin.Log.Warn(
@@ -240,19 +259,19 @@ namespace ControllerAutoAdjust
                     $"(statistic {verdict.Statistic:F1}). Pooling across that fits a compromise " +
                     "suiting neither side.");
             }
-            else if (answer == Preferences.PriorReplays.Unanswered)
+            else if (!Preferences.RangeProfileAnswered)
             {
                 Plugin.Log.Info(
                     $"{verdict.Sessions} sessions predate the journal and look consistent " +
                     $"(largest shift {verdict.GapDegrees:F1} deg, statistic {verdict.Statistic:F1}), " +
-                    "but nobody has confirmed they were played on the current settings");
+                    "but nobody has said which profile they were played on");
             }
             else
             {
                 Plugin.Log.Info(
-                    $"{verdict.Sessions} sessions predate the journal; you have said they used " +
-                    $"the current settings and the data agrees (largest shift " +
-                    $"{verdict.GapDegrees:F1} deg, statistic {verdict.Statistic:F1})");
+                    $"{verdict.Sessions} sessions predate the journal; the profile you named " +
+                    $"is consistent with them (largest shift {verdict.GapDegrees:F1} deg, " +
+                    $"statistic {verdict.Statistic:F1})");
             }
         }
 
@@ -311,22 +330,53 @@ namespace ControllerAutoAdjust
         }
 
         /// <summary>
-        /// The settings a replay from before the journal is assumed to have been played on.
+        /// The settings a replay from before the journal was played on.
         /// </summary>
         /// <remarks>
-        /// The current ones, which is a guess and is reported as such. It is right for a
-        /// player who set their grip once and wrong for one who has been experimenting, and
-        /// nothing in the replay can tell the two apart.
+        /// If the player has named the profile, its stored numbers are used -- real values
+        /// rather than a guess, and the game still holds them. Failing that, the settings in
+        /// force now, which is a guess and is reported as one.
+        ///
+        /// Naming a profile is evidence, not proof: profiles are editable, so this is what
+        /// the profile holds today and only matches history if nobody has changed it since.
+        /// The change detector gets to disagree with it either way.
         /// </remarks>
-        private static OffsetJournal.Epoch Assumed(OffsetState.Reading r) =>
-            new OffsetJournal.Epoch
+        private static OffsetJournal.Epoch Assumed(OffsetState.Reading r)
+        {
+            var wanted = Preferences.RangeProfile;
+            if (wanted >= 0)
+            {
+                foreach (var profile in SettingsWatcher.Profiles)
+                {
+                    if (profile.index != wanted)
+                    {
+                        continue;
+                    }
+                    return new OffsetJournal.Epoch
+                    {
+                        LeftRotation = profile.leftController.rotation,
+                        LeftPosition = profile.leftController.position,
+                        RightRotation = profile.rightController.rotation,
+                        RightPosition = profile.rightController.position,
+                        LegacyRotation = r.LegacyRotation,
+                        LegacyValid = r.LegacyValid,
+                        AlternativeHandling = profile.alternativeHandling,
+                    };
+                }
+                Plugin.Log.Warn($"profile #{wanted} was named for the earlier replays but no " +
+                                "longer exists; falling back to the current settings");
+            }
+            return new OffsetJournal.Epoch
             {
                 LeftRotation = r.Left.TypedRotation,
+                LeftPosition = r.Left.TypedPosition,
                 RightRotation = r.Right.TypedRotation,
+                RightPosition = r.Right.TypedPosition,
                 LegacyRotation = r.LegacyRotation,
                 LegacyValid = r.LegacyValid,
                 AlternativeHandling = r.AlternativeHandling,
             };
+        }
 
         private static void Report(
             string name, List<CutSample> cuts, Vector3 current, bool left,
@@ -348,6 +398,18 @@ namespace ControllerAutoAdjust
                 $"| mean cut {meanDistance * 100f:F2} -> {after * 100f:F2} cm " +
                 $"| worth {found.GainFraction:P3} of score" +
                 (trusted ? "" : " [too few runs to act on]"));
+
+            var line = trusted
+                ? $"{name.Trim()}: {current} -> {found.Setting}, worth {found.GainFraction:P2}"
+                : $"{name.Trim()}: too few runs to advise ({cuts.Count:N0} cuts)";
+            if (left)
+            {
+                Advice.Left = line;
+            }
+            else
+            {
+                Advice.Right = line;
+            }
         }
 
         /// <summary>Replay folders: this install's, plus any the player has listed.</summary>

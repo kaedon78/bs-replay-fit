@@ -98,6 +98,7 @@ namespace ControllerAutoAdjust
                 if (ProfilesField?.GetValue(provider) is ControllerProfilesModel model)
                 {
                     _profiles = model;
+                    _shared = model;
                     _profiles.onControllerProfilesUIEvent += OnProfilesUI;
                     Plugin.Log.Info("watching the controller profiles screen");
                     break;
@@ -116,6 +117,19 @@ namespace ControllerAutoAdjust
                 Capture();
             }
         }
+
+        /// <summary>The saved profiles, for naming which one a stretch of history used.</summary>
+        /// <remarks>
+        /// Better than assuming the current settings, because the profile still holds real
+        /// numbers rather than a guess. Not infallible: profiles are editable, so it gives
+        /// the values the profile holds *now*, which are the historical ones only if nobody
+        /// has changed it since. That is still evidence where the alternative was none, and
+        /// the change detector gets to disagree with it.
+        /// </remarks>
+        internal static IReadOnlyList<ControllerProfile> Profiles =>
+            _shared?.profiles ?? (IReadOnlyList<ControllerProfile>)Array.Empty<ControllerProfile>();
+
+        private static ControllerProfilesModel _shared;
 
         private static void Capture()
         {

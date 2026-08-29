@@ -29,6 +29,7 @@ namespace ControllerAutoAdjust
             _host.AddComponent<CutRecorder>();
             _host.AddComponent<SwingHarness>();
             _host.AddComponent<SettingsWatcher>();
+            _host.AddComponent<SettingsMenu.Installer>();
             _host.AddComponent<Recommender>();
             SearchSelfTest.Run();
             Log.Info("OnStart: probe and recorder attached");
@@ -43,6 +44,7 @@ namespace ControllerAutoAdjust
                 _host.GetComponent<CutRecorder>()?.Flush();
                 Object.Destroy(_host);
             }
+            SettingsMenu.Unregister();
             Log.Info("OnExit");
         }
     }

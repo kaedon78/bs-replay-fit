@@ -1,0 +1,25 @@
+<settings-container xmlns='http://monkeymanboy.com/BSML/'
+                    xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'>
+
+  <text text='~summary' align='Center'/>
+  <text text='~timeline' align='Center'/>
+  <text text='~evidence' align='Center'/>
+
+  <slider-setting text='Use replays from'
+                  value='start-index' min='0' max='~session-max' increment='1'
+                  integer-only='true' formatter='format-session' apply-only='false'
+                  hover-hint='Earliest session to train on. Set this to when you last changed your grip.'/>
+
+  <slider-setting text='Use replays until'
+                  value='end-index' min='0' max='~session-max' increment='1'
+                  integer-only='true' formatter='format-session' apply-only='false'
+                  hover-hint='Latest session to train on.'/>
+
+  <list-setting text='Those replays were played on'
+                value='profile' choices='profile-choices' apply-only='false'
+                hover-hint='Which controller profile was in use for the selected range. Replays do not record it, so this cannot be worked out from the files.'/>
+
+  <text text='~left-advice' align='Center'/>
+  <text text='~right-advice' align='Center'/>
+
+</settings-container>

@@ -7,6 +7,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="manifest.json" />
+    <EmbeddedResource Include="Views\settings.bsml" />
   </ItemGroup>
 
   <!--
@@ -47,6 +48,11 @@
     </Reference>
     <Reference Include="DataModels">
       <HintPath>$(BSRefDir)DataModels.dll</HintPath><Private>false</Private>
+    </Reference>
+    <!-- BSML ships as a mod rather than with the game, so it is resolved from the modded
+         install. Assembly name and file name differ; the HintPath is what resolves. -->
+    <Reference Include="BeatSaberMarkupLanguage">
+      <HintPath>$(BSModdedInstallDir)Plugins\BSML.dll</HintPath><Private>false</Private>
     </Reference>
   </ItemGroup>
 
