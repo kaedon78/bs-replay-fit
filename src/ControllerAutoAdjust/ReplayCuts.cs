@@ -111,7 +111,7 @@ namespace ControllerAutoAdjust
                     index.Add(i);
                 }
             }
-            if (index.Count < minCuts || replay.FrameTimes.Length < 2)
+            if (index.Count < minCuts || replay.FrameCount < 2)
             {
                 return result;
             }
@@ -152,8 +152,8 @@ namespace ControllerAutoAdjust
                 residuals.Add(Mathf.Abs(Mathf.Abs(signed) - reported[i]));
 
                 var when = good[index[i]].EventTime;
-                var pose = Slerp(replay.FrameTimes, rotations, when);
-                var grip = Lerp(replay.FrameTimes, positions, when);
+                var pose = Slerp(replay.FrameTimes, replay.FrameCount, rotations, when);
+                var grip = Lerp(replay.FrameTimes, replay.FrameCount, positions, when);
                 var across = Quaternion.Inverse(pose) * normal[i];
                 var blade = pose * Vector3.forward;
 
@@ -243,31 +243,40 @@ namespace ControllerAutoAdjust
             }
         }
 
-        private static int Bracket(float[] times, float when, out float f)
+        /// <summary>
+        /// The frame pair straddling a moment, and how far between them it falls.
+        /// </summary>
+        /// <remarks>
+        /// <paramref name="count"/> rather than the array's length: the frame arrays are
+        /// reused between replays and are as long as the longest one seen, so their tail
+        /// holds another song's poses. A binary search over that returns a real-looking answer
+        /// from the wrong replay.
+        /// </remarks>
+        private static int Bracket(float[] times, int count, float when, out float f)
         {
-            var i = Array.BinarySearch(times, when);
+            var i = Array.BinarySearch(times, 0, count, when);
             if (i < 0)
             {
                 i = ~i - 1;
             }
-            i = Mathf.Clamp(i, 0, times.Length - 2);
+            i = Mathf.Clamp(i, 0, count - 2);
             var span = Mathf.Max(times[i + 1] - times[i], 1e-9f);
             f = Mathf.Clamp01((when - times[i]) / span);
             return i;
         }
 
-        private static Vector3 Lerp(float[] times, Vector3[] values, float when)
+        private static Vector3 Lerp(float[] times, int count, Vector3[] values, float when)
         {
-            var i = Bracket(times, when, out var f);
+            var i = Bracket(times, count, when, out var f);
             return Vector3.Lerp(values[i], values[i + 1], f);
         }
 
-        private static Quaternion Slerp(float[] times, Quaternion[] values, float when)
+        private static Quaternion Slerp(float[] times, int count, Quaternion[] values, float when)
         {
             // Frames land about 7 ms apart, so the arc between neighbours is under a degree
             // and a normalised lerp is within rounding of the real slerp. Matched to the
             // offline implementation deliberately, so the two can be compared.
-            var i = Bracket(times, when, out var f);
+            var i = Bracket(times, count, when, out var f);
             var a = values[i];
             var b = values[i + 1];
             if (a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w < 0f)

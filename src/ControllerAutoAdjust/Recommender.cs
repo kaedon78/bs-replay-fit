@@ -98,6 +98,25 @@ namespace ControllerAutoAdjust
         {
             try
             {
+                // A control run, for attributing memory rather than guessing at it. Other
+                // mods load leaderboards and scan songs during the same window, so a heap
+                // delta measured only with ingestion running cannot say which of them grew.
+                // With this marker present the loop is skipped and the same window measured.
+                // Measured, not assumed: with this marker the read is skipped and the same
+                // window sampled, so growth from other mods loading can be told from growth
+                // caused here. It reported 662 MB against 688 MB -- reading 555 replays costs
+                // about 26 MB, where the process sits above 3 GB for reasons of its own.
+                var control = File.Exists(Path.Combine(Paths.DataDir, "no-ingest.on"));
+                if (control)
+                {
+                    var idle = GC.GetTotalMemory(true);
+                    Thread.Sleep(90000);
+                    Plugin.Log.Info(
+                        $"CONTROL (no ingestion): managed heap {idle / 1048576} MB -> "
+                        + $"{GC.GetTotalMemory(true) / 1048576} MB over the same 90 s window");
+                    return;
+                }
+
                 var files = Discover();
                 if (files.Count == 0)
                 {
@@ -140,6 +159,19 @@ namespace ControllerAutoAdjust
                 var speeds = new List<float>();
                 var residuals = new List<float>();
 
+                // One replay's worth of buffers for the whole pass, rather than a fresh
+                // few megabytes per file for the garbage collector to sit on.
+                var scratch = new Bsor.Scratch();
+                // Managed heap, not working set. The process sits at gigabytes with a large
+                // song library loaded, and reading the total told me this ingestion was
+                // responsible for all of it -- which it was not. This measures only what this
+                // code allocates.
+                // Not forced in a normal run: GetTotalMemory(true) runs a full blocking
+                // collection, and two of those per ingestion is a real pause to buy a number
+                // nobody is reading. Forced only alongside the control, where the comparison
+                // needs both ends settled.
+                var measuring = File.Exists(Path.Combine(Paths.DataDir, "measure-heap.on"));
+                var heapBefore = GC.GetTotalMemory(measuring);
                 var seen = 0;
                 foreach (var file in files)
                 {
@@ -158,7 +190,7 @@ namespace ControllerAutoAdjust
                     Bsor.Replay replay;
                     try
                     {
-                        replay = Bsor.Parse(file);
+                        replay = Bsor.Parse(file, scratch);
                     }
                     catch
                     {
@@ -225,6 +257,11 @@ namespace ControllerAutoAdjust
                     .Select(g => new KeyValuePair<DateTime, int>(g.Key, g.Count()))
                     .ToList();
 
+                var heapAfter = GC.GetTotalMemory(measuring);
+                Plugin.Log.Info(
+                    $"managed heap {heapBefore / 1048576} MB -> {heapAfter / 1048576} MB "
+                    + $"over {seen} replays"
+                    + (measuring ? " (both settled)" : ""));
                 Plugin.Log.Info(
                     $"replays: {used} used, {skipped} skipped, {seen} of {files.Count} opened ("
                     + string.Join(", ", why.OrderByDescending(k => k.Value)

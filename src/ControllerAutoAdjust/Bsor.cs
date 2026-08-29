@@ -37,6 +37,47 @@ namespace ControllerAutoAdjust
 
         internal enum NoteEvent { Good = 0, Bad = 1, Miss = 2, Bomb = 3 }
 
+        /// <summary>Buffers reused across a whole pass, instead of allocated per replay.</summary>
+        /// <remarks>
+        /// A replay's frame stream is a couple of megabytes and its pose arrays another
+        /// megabyte and a half. Everything over 85 KB lands on the large object heap, which is
+        /// not compacted and is only reclaimed on a gen-2 collection -- so reading a few
+        /// hundred replays threw well over a gigabyte of multi-megabyte blocks at a heap that
+        /// gave none of it back promptly. The working set reached 3 GB to keep about 14 KB of
+        /// cuts per replay.
+        ///
+        /// Nothing here is a cache: it is one replay's worth of room, grown to the largest
+        /// seen and written over each time. The arrays outlive their replay, so
+        /// <see cref="Replay.FrameCount"/> is what says how much of them is real -- their
+        /// length is whatever the biggest replay so far needed.
+        /// </remarks>
+        internal sealed class Scratch
+        {
+            internal byte[] Bytes = Array.Empty<byte>();
+            internal float[] Times = Array.Empty<float>();
+            internal Vector3[] Left = Array.Empty<Vector3>();
+            internal Vector3[] Right = Array.Empty<Vector3>();
+            internal Quaternion[] LeftRotation = Array.Empty<Quaternion>();
+            internal Quaternion[] RightRotation = Array.Empty<Quaternion>();
+
+            internal void Fit(int frames, int bytes)
+            {
+                if (Bytes.Length < bytes)
+                {
+                    Bytes = new byte[bytes];
+                }
+                if (Times.Length >= frames)
+                {
+                    return;
+                }
+                Times = new float[frames];
+                Left = new Vector3[frames];
+                Right = new Vector3[frames];
+                LeftRotation = new Quaternion[frames];
+                RightRotation = new Quaternion[frames];
+            }
+        }
+
         internal class Info
         {
             public string GameVersion = "";
@@ -120,10 +161,21 @@ namespace ControllerAutoAdjust
             public Quaternion[] LeftRotation = Array.Empty<Quaternion>();
             public Quaternion[] RightRotation = Array.Empty<Quaternion>();
             public List<Note> Notes = new List<Note>();
+
+            /// <summary>
+            /// How many frames are real. The arrays are borrowed and may be longer.
+            /// </summary>
+            /// <remarks>
+            /// Reading past this finds the tail of some previous, longer replay, which is
+            /// plausible data in the wrong place -- and a binary search over it returns a
+            /// confident answer from another song.
+            /// </remarks>
+            public int FrameCount;
         }
 
-        internal static Replay Parse(string path)
+        internal static Replay Parse(string path, Scratch scratch = null)
         {
+            scratch = scratch ?? new Scratch();
             using (var stream = File.OpenRead(path))
             using (var r = new BinaryReader(stream, Encoding.UTF8))
             {
@@ -147,7 +199,7 @@ namespace ControllerAutoAdjust
                     }
                     else if (block == 1)
                     {
-                        ReadFrames(r, replay);
+                        ReadFrames(r, replay, scratch);
                     }
                     else if (block == 2)
                     {
@@ -215,20 +267,27 @@ namespace ControllerAutoAdjust
             return info;
         }
 
-        private static void ReadFrames(BinaryReader r, Replay replay)
+        private static void ReadFrames(BinaryReader r, Replay replay, Scratch scratch)
         {
             var count = r.ReadInt32();
             if (count < 0)
             {
                 throw new InvalidDataException($"implausible frame count {count}");
             }
-            var raw = r.ReadBytes(count * FrameBytes);
+            var wanted = count * FrameBytes;
+            scratch.Fit(count, wanted);
+            var raw = scratch.Bytes;
+            if (r.Read(raw, 0, wanted) != wanted)
+            {
+                throw new InvalidDataException("replay ended mid-frame");
+            }
 
-            replay.FrameTimes = new float[count];
-            replay.LeftHand = new Vector3[count];
-            replay.RightHand = new Vector3[count];
-            replay.LeftRotation = new Quaternion[count];
-            replay.RightRotation = new Quaternion[count];
+            replay.FrameCount = count;
+            replay.FrameTimes = scratch.Times;
+            replay.LeftHand = scratch.Left;
+            replay.RightHand = scratch.Right;
+            replay.LeftRotation = scratch.LeftRotation;
+            replay.RightRotation = scratch.RightRotation;
 
             for (var i = 0; i < count; i++)
             {
