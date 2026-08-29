@@ -135,6 +135,57 @@ namespace ControllerAutoAdjust
         internal static ControllerProfilesModel Model => _shared;
 
         /// <summary>
+        /// Persist which profile is selected, which nothing else here will do for us.
+        /// </summary>
+        /// <remarks>
+        /// A profile's numbers and the choice of which profile is live are saved in two
+        /// different places by two different owners. <c>ControllerProfilesModel.SaveAsync</c>
+        /// writes the profiles file; the selection lives in the main settings, and the only
+        /// thing that writes those is the game's own settings screen being closed with OK.
+        ///
+        /// The mod settings screen is not that screen -- its OK restarts the menu rather than
+        /// saving anything -- so a selection made from here was never written down. It held
+        /// for as long as the model stayed alive and then quietly went back, which reads as
+        /// the switch having silently failed.
+        ///
+        /// Both dependencies hang off the model already held: the settings themselves, and
+        /// the file storage the profiles are saved through.
+        /// </remarks>
+        internal static bool TrySaveSelectedProfile()
+        {
+            try
+            {
+                var model = _shared;
+                if (model == null)
+                {
+                    return false;
+                }
+                var manager = Field(model, "_settingsManager") as SettingsManager;
+                var fileModel = Field(model, "_fileModel");
+                var storage = fileModel == null ? null : Field(fileModel, "_fileStorage") as IFileStorage;
+                if (manager == null || storage == null)
+                {
+                    Plugin.Log.Warn(
+                        "could not reach the settings writer; the selected profile will hold "
+                        + "for this session only");
+                    return false;
+                }
+                SettingsIO.SaveAsync(storage, manager.settings);
+                return true;
+            }
+            catch (Exception e)
+            {
+                Plugin.Log.Warn($"could not save the selected profile: {e.Message}");
+                return false;
+            }
+        }
+
+        private static object Field(object target, string name) =>
+            target.GetType()
+                .GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)
+                ?.GetValue(target);
+
+        /// <summary>
         /// Journal the live settings now, rather than waiting to be told.
         /// </summary>
         /// <remarks>

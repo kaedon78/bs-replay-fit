@@ -620,6 +620,7 @@ namespace ControllerAutoAdjust
             }
 
             var wasSelected = model.selectedProfile == target;
+            var selected = wasSelected;
             if (!wasSelected)
             {
                 // Its position in the list, not its own index. Built-in and custom profiles
@@ -637,9 +638,16 @@ namespace ControllerAutoAdjust
                 if (at >= 0)
                 {
                     model.UpdateSelectedProfile(at);
+                    selected = true;
                 }
             }
             model.SaveAsync();
+
+            // The profiles file holds the numbers; which profile is live is a main setting,
+            // and the only thing that writes those is the game's settings screen closing on
+            // OK. This is not that screen, so the selection had to be written here or it
+            // would hold until the model was next rebuilt and then quietly go back.
+            var kept = !selected || SettingsWatcher.TrySaveSelectedProfile();
 
             Plugin.Log.Info(
                 $"positions kept from the profile in use: L {OffsetState.Fmt(leftPosition)} "
@@ -648,7 +656,8 @@ namespace ControllerAutoAdjust
                 $"applied to profile #{target.index + 1}: {before} -> "
                 + $"L {Short(advice.Left)} R {Short(advice.Right)}"
                 + (handlingMoved ? $", handling set to {advice.AlternativeHandling}" : "")
-                + (wasSelected ? "" : ", and selected it"));
+                + (wasSelected ? "" : selected ? ", and selected it" : ", but could NOT select it")
+                + (kept ? "" : "; selection not saved"));
 
             // A frame or two late: the write refreshes the controllers, and the poses the
             // journal reads are last frame's until it has.
@@ -656,7 +665,9 @@ namespace ControllerAutoAdjust
             ScrollSoon();
 
             Advice.Note = $"Applied to profile #{target.index + 1}"
-                          + (wasSelected ? "." : " and switched to it.")
+                          + (wasSelected ? "." : selected ? " and switched to it." : ".")
+                          + (selected ? "" : " Could not switch to it; see the log.")
+                          + (kept ? "" : " It will revert when the game restarts.")
                           + (handlingMoved ? " Rotate-then-move set to match the fit." : "");
             Advice.Publish();
         }

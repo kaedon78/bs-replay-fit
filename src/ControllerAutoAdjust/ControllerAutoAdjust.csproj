@@ -46,6 +46,14 @@
     <Reference Include="BeatSaber.GameSettings">
       <HintPath>$(BSRefDir)BeatSaber.GameSettings.dll</HintPath><Private>false</Private>
     </Reference>
+    <!-- The settings struct and the storage they are written through: saving which profile
+         is selected needs both, and nothing else does it for a change made from a mod. -->
+    <Reference Include="BeatSaber.Settings">
+      <HintPath>$(BSRefDir)BeatSaber.Settings.dll</HintPath><Private>false</Private>
+    </Reference>
+    <Reference Include="BGLib.FileStorage">
+      <HintPath>$(BSRefDir)BGLib.FileStorage.dll</HintPath><Private>false</Private>
+    </Reference>
     <Reference Include="DataModels">
       <HintPath>$(BSRefDir)DataModels.dll</HintPath><Private>false</Private>
     </Reference>
