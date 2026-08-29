@@ -6,5 +6,8 @@
   "version": "0.1.0",
   "description": "Measures where your sabers actually cut and suggests a controller offset that lands them closer to centre.",
   "gameVersion": "__GAMEVERSION__",
-  "dependsOn": { "BSIPA": "^4.3.0" }
+  "dependsOn": {
+    "BSIPA": "^4.3.0",
+    "BeatSaberMarkupLanguage": "^1.12.0"
+  }
 }

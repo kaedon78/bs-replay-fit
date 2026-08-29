@@ -1,146 +1,131 @@
-# ControllerAutoAdjust
+# Controller Auto Adjust
 
-A Beat Saber mod that watches where your sabers actually cut and suggests a controller
-offset that lands them closer to the centre of the note.
+Beat Saber scores every note out of 115: 70 for winding up far enough, 30 for following
+through, and 15 for how close to the note's centre your blade passed. The first two come
+from how far your controller *turned*, so no controller offset can touch them. The third is
+pure placement — and placement is exactly what a controller offset moves.
 
-## What it is fixing
+This mod reads the replays you have already played, measures where your sabers actually
+crossed each note, and works out the whole-degree controller rotation that would have put
+them closer to centre. It suggests; you decide. When you accept, it writes the numbers into
+a controller profile you choose, the same values you could type into the settings screen
+yourself.
 
-A note is worth 115 points: 70 for winding up far enough, 30 for following through, and 15
-for how close to the note's centre the blade passed. The first two are measured from how far
-the controller *turned*, not where it was or which way it pointed, so a fixed offset cannot
-touch them. Only the third moves. That is the whole safety argument for this mod — it
-re-aims a swing you already own rather than asking you to swing differently.
+## What to expect
 
-On the player this was developed against, measured over 273 replays and 37 sessions:
+**A small, real improvement, or an honest "nothing to gain".**
+
+On the player it was developed against, the best available offset was worth about **+0.3%
+accuracy**. That is small *because that player's grip was already close*. Someone genuinely
+misaligned has more to gain. The mod is built to say plainly when there is nothing worth
+changing rather than inventing a reason to adjust.
+
+Two things it will not do:
+
+- **It will not change how you swing.** It re-aims a swing you already own.
+- **It will not fix inconsistency.** Most of your cut distance is per-swing scatter that no
+  fixed setting reaches. Only the steady bias underneath it can be corrected.
+
+Your two hands will usually want different numbers. Applying one hand's answer to the other
+costs about as much as the right one gains, so it always fits them separately.
+
+## Requirements
 
 | | |
 |---|---|
-| swing points | 99.95% of maximum |
-| accuracy points (cut distance) | 60.68% |
+| Beat Saber | 1.40.5 or 1.45.0 (download the matching build) |
+| BSIPA | 4.3 or newer |
+| BSML | 1.12 or newer |
+| Replays | BeatLeader, or any folder of `.bsor` files |
 
-Every point missing was placement, none of it swinging.
+Replays are where all the measurement comes from. Without them the mod has nothing to read.
+You need roughly **20 runs** on one set of controller settings before it will recommend
+anything — below that it shows what it found but refuses to advise on it.
 
-## What it will and will not buy you
+## Installing
 
-Be honest with users about this. On the developing player a rigid offset explains only
-**8–11%** of the signed cut distance; mean distance is 11–14 cm, of which about 6 cm is
-fixed bias and 13–17 cm is per-swing scatter no setting reaches. Held out across sessions,
-the best offset is worth about **+0.3% of final score**.
+Extract the zip into your Beat Saber folder so that `ControllerAutoAdjust.dll` lands in
+`Plugins`. Start the game once, then find **Controller Auto Adjust** under Mod Settings.
 
-That number is personal, not universal. It is small here *because this player's grip is
-already close*. Someone genuinely misaligned has much more to gain, and the mod should say
-plainly when a player has nothing to gain rather than inventing a reason to adjust.
+## Using it
 
-Two facts that shape the design:
+The panel is four numbered steps, top to bottom.
 
-- **The hands want different settings.** Applying either hand's fitted offset to the other
-  costs about as much as the right one gains. Fit and apply per hand, always.
-- **The residual drifts**, around 1–2 degrees a month in yaw. A one-time fit goes stale.
-  That, not the one-off gain, is what justifies automating this.
+**1. Read replays.** Parses your replay files. Slow the first time — a minute or so for a
+large library — and near-instant afterwards, because the reduced form is cached. Nothing
+happens until you press it; the mod never reads on startup.
 
-## The problem this repo exists to solve first
+**2. Tell it which settings your old replays were played on.** A replay does not record the
+controller offsets it was played with, and nothing in the file can recover them. From the
+moment you install this mod it keeps its own record, but everything before that needs your
+answer. Set the date range with the two sliders, pick the controller profile you were using,
+and press **Assign range**. If you changed your grip partway through your history, assign
+each stretch separately — the list shows how many runs each range actually covers, so you
+can check a range holds what you meant before fitting on it.
 
-Everything above was measured outside the game, from BeatLeader replays. That works, and the
-measurement is sound — the scoring model was verified by rebuilding a replay's final score
-exactly (582,075 against 582,075).
+Runs that no range covers are left out of the fit entirely. Guessing at them would mix cuts
+from an unknown grip into a group that claims to know its own, which is the one error worth
+avoiding here.
 
-What did *not* work outside the game was the last step: converting a measured saber-frame
-correction into numbers for the settings screen. The settings screen's numbers are not what
-the game feeds to `Quaternion.Euler`, and two defensible readings of
-`VRController.TryGetControllerOffset` disagreed by 3–8° in the saber's frame. Replay data
-could not separate them — the run-to-run spread of the fitted angle is ~1.8°, so telling
-them apart would have taken more sessions than it takes to ask the game directly.
+**3. Fit both hands.** Fast, so change the range and refit freely.
 
-That cost a wrong recommendation before it was caught, and the failure mode is the reason
-this is worth writing down: the left hand's correction came out sign-flipped on the term
-doing most of the work, and a sign-flipped offset does not look wrong. It looks like a
-setting that did nothing. The measured gain fell from an available +0.373% to +0.059% while
-every number in the pipeline stayed plausible.
+**4. Apply.** Pick which profile to write into, and press. It writes the fitted rotation,
+keeps the position you already had, switches to that profile, and records the change so
+later replays are tied to the new grip.
 
-The next section is what an in-game probe returned, which settled it in one launch.
+## Reading the result
 
-In-process the question disappears. So does most of the rest of the offline pipeline:
+    left: (42.00, -5.00, 0.00) -> (45.00, 0.00, 0.00), worth 0.31% accuracy
 
-| needed for replays | in-process |
+Your current setting, the suggested one, and what the change is worth as a percentage of
+accuracy on the cuts it was measured on. Small numbers are normal. A large one usually means
+the range you assigned describes settings you were not actually playing on.
+
+If it says no group has enough runs, either widen the range or play more.
+
+## After you apply
+
+The change is recorded, so the next fit knows your history has a boundary in it and will not
+average across it. Play 10–20 runs on the new grip and fit again: if the first fit was right,
+the second should ask for a much smaller correction.
+
+## Fair play
+
+The mod only ever writes the same per-hand values the settings screen writes. It does not
+move your sabers at runtime, does not patch scoring, and does nothing during a map. What it
+produces is a controller configuration you could have typed in yourself.
+
+## Where its data lives
+
+`UserData/ControllerAutoAdjust/`:
+
+| file | what it is |
 |---|---|
-| BSOR parsing | subscribe to the cut event |
-| reconstructing each note's centre from the grid and a fitted note speed | `noteTransform.position` — exact |
-| excluding chain links as off-grid; the `time_deviation` sign trap | gone with the reconstruction |
-| interpolating frames to find the saber pose at the cut | the transform is right there |
-| inferring which settings each replay was played on | stamp the active offsets on each cut |
-| Euler → saber-frame conversion | ask `TryGetControllerOffset` |
+| `cuts.cache` | parsed replays, so a second read is fast |
+| `offsets.jsonl` | when your controller settings changed |
+| `preferences.txt` | the ranges you assigned |
+| `replay-folders.txt` | extra replay folders, one path per line (optional) |
 
-What remains per cut is five floats — signed distance, the plane normal's two saber-frame
-components, the lever, the combo multiplier. 100k cuts is 2 MB, and the fit is a grid search
-over candidate integer settings.
+`replay-folders.txt` is worth knowing about if you keep several game installs — a separate
+Beat Saber version has its own replay folder, and listing it here lets the mod use that
+history too.
 
-## The conversion, as measured
+Deleting any of these is safe. The cache rebuilds, and the other two only lose answers you
+gave it.
 
-**Milestone 1 is done.** `OffsetProbe` logged, for each hand, the settings in force and the
-offset pose the game computed from them. The mapping is now pinned, and the position
-transform reproduces to four decimals on both hands:
+## Known limits
 
-    appliedRotation = Euler(mirror(legacyRotationOffset + typedRotation))
-    appliedPosition = appliedRotation * mirror(legacyPositionOffset + typedPosition)
-    mirror(v) = (v.x, -v.y, -v.z) for rotation, (-v.x, v.y, v.z) for position, left hand only
+- **One Saber, speed and practice modifiers are excluded.** They change the geometry or the
+  scoring, so their cuts would bias the fit.
+- **Chains are ignored.** Chain links do not sit where their grid position claims, so their
+  cut distances cannot be placed reliably.
+- **Whole degrees only**, because that is what the settings screen accepts.
+- **On 1.40.5**, a grip change you make in the game's own settings screen is noticed within
+  30 seconds rather than immediately. That version has no event to hook. It makes no
+  difference unless you change settings and start a map inside the same half-minute.
 
-The platform's root pose left-multiplies the rotation and therefore cancels out of any
-difference between two settings, which is what makes the search computable at all.
+## If something goes wrong
 
-`legacyRotationOffset` is **zero for this player**, but note carefully where that comes from.
-Under `fpfc` the probe reports it zero via `DevicelessVRHelper`, which says nothing about VR
-— with no device present the helper returns zeros whatever the hardware would have done. The
-evidence for the VR case is separate and stronger: every archived log from a real VR session
-carries `[UnityXRHelper] Unexpected manufacturer name: Unknown`, so
-`TryGetLegacyPoseOffsetForNode` returns false and leaves the offset at zero there too.
-
-The game's source would otherwise apply -16.3 degrees of X for a Valve Index. A mod shipping
-to other people must therefore read this at runtime and never assume either case — the two
-differ by more than the whole correction being applied.
-
-Because it is zero in both, fpfc runs are representative *here*, which is what makes the loop
-developable without a headset.
-
-## Status
-
-**Milestone 2 — live cut capture.** Next, in order: live cut capture → accumulate with the active offsets stamped → grid search →
-a settings panel that suggests rather than silently applies.
-
-## Design decisions worth not relitigating
-
-- **Write vanilla per-hand settings; never apply a runtime saber transform.** A mod that
-  moves sabers at runtime is a leaderboard-flagging risk; writing the values the settings
-  screen writes is not. It costs whole-degree granularity, which is free — resolving 1°
-  takes 10–22 runs.
-- **Suggest, with auto-apply opt-in.** Changing someone's grip without telling them is how a
-  mod gets uninstalled.
-- **Do not over-filter runs.** Measured: excluding fails, early exits and off-range
-  difficulties moves the answer by 1–2° and does not improve the held-out gain. A bad run
-  contributes noise, not bias — only successful cuts are used, and a sloppy cut is still an
-  honest sample. The filters that matter are a minimum cut count and excluding speed
-  modifiers and One Saber, which genuinely change the geometry.
-- **Thresholds from the noise, not taste.** ≥20 qualifying runs since the last change,
-  ≤1–2° per step.
-
-## Building
-
-Game assemblies come from a version-pinned reference set, never a live install. The default
-paths point at the `BSModUpdater` tree on the development machine; override them in a
-gitignored `Directory.Build.user.props`:
-
-```xml
-<Project>
-  <PropertyGroup>
-    <BSRefRoot>D:\wherever\refs\</BSRefRoot>
-    <BSModdedInstallDir>D:\wherever\1.45.0-modded\</BSModdedInstallDir>
-  </PropertyGroup>
-</Project>
-```
-
-```bash
-dotnet build -c Release src/ControllerAutoAdjust/ControllerAutoAdjust.csproj
-```
-
-The manifest is an embedded resource; BSIPA finds plugin metadata that way and skips the
-plugin in silence if it is missing. An incremental build does not re-embed it — use
-`-t:Rebuild` after editing `manifest.json`.
+The log is `Logs/_latest.log` in your Beat Saber folder, and every line from this mod is
+tagged `ControllerAutoAdjust`. That log is the most useful thing you can attach to a bug
+report.
