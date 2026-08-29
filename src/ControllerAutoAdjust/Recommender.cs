@@ -649,7 +649,7 @@ namespace ControllerAutoAdjust
                 $"{name}: {cuts.Count:N0} cuts | now {current} -> suggest {found.Setting} "
                 + $"| turn {found.Turn.x * Mathf.Rad2Deg:F2},{found.Turn.y * Mathf.Rad2Deg:F2} deg "
                 + $"| mean cut {meanDistance * 100f:F2} -> {after * 100f:F2} cm "
-                + $"| worth {found.GainFraction:P3} of score | {clock.ElapsedMilliseconds} ms, "
+                + $"| worth {found.GainFraction:P3} accuracy | {clock.ElapsedMilliseconds} ms, "
                 + $"{found.DistinctTurns} distinct turns of {found.Candidates} settings"
                 + (trusted ? "" : " [too few runs to act on]"));
 
@@ -661,7 +661,7 @@ namespace ControllerAutoAdjust
                 return null;
             }
             var line = trusted
-                ? $"{hand}: {current} -> {found.Setting}, worth {found.GainFraction:P2}"
+                ? $"{hand}: {current} -> {found.Setting}, worth {found.GainFraction:P2} accuracy"
                 : $"{hand}: too few runs to advise ({cuts.Count:N0} cuts)";
             if (left)
             {

@@ -44,12 +44,35 @@ namespace ControllerAutoAdjust
         private float _nextPoll;
         private float _nextLook;
 
+        /// <summary>
+        /// A capture asked for by an event, to be done on our own frame instead.
+        /// </summary>
+        /// <remarks>
+        /// The anchor event fires from inside <c>VRController.UpdateAnchorOffsetPose</c>,
+        /// which the controller calls while setting itself up. Reading the offsets there
+        /// caught the provider half-built and threw, and the throw did not stay ours: it
+        /// unwound through the game's own setup, which left the controller unusable and then
+        /// threw again from Update every frame after. Forty-seven thousand exceptions in
+        /// twenty-five seconds, and a player who could not use their hands.
+        ///
+        /// Nothing this mod does needs to happen inside that call. Noting that a capture is
+        /// wanted and doing it on the next frame keeps the promptness the event was for,
+        /// coalesces a storm of them into one, and puts our work back on our own stack where
+        /// a mistake in it can only cost us.
+        /// </remarks>
+        private volatile bool _capturePending;
+
         private void Update()
         {
             if (Time.unscaledTime >= _nextLook)
             {
                 _nextLook = Time.unscaledTime + LookForControllersEvery;
                 Attach();
+            }
+            if (_capturePending)
+            {
+                _capturePending = false;
+                Capture();
             }
             if (Time.unscaledTime >= _nextPoll)
             {
@@ -109,7 +132,9 @@ namespace ControllerAutoAdjust
             }
         }
 
-        private void OnAnchorUpdated(VRController controller, Pose pose) => Capture();
+        // Deliberately does nothing but raise a flag; see _capturePending.
+        private void OnAnchorUpdated(VRController controller, Pose pose) =>
+            _capturePending = true;
 
         private void OnProfilesUI(bool opened)
         {
@@ -117,7 +142,7 @@ namespace ControllerAutoAdjust
             // only record what is about to be changed.
             if (!opened)
             {
-                Capture();
+                _capturePending = true;
             }
         }
 
@@ -202,9 +227,18 @@ namespace ControllerAutoAdjust
 
         private static void Capture()
         {
-            if (OffsetState.TryRead(out var reading))
+            try
             {
-                OffsetJournal.RecordIfChanged(reading);
+                if (OffsetState.TryRead(out var reading))
+                {
+                    OffsetJournal.RecordIfChanged(reading);
+                }
+            }
+            catch (Exception e)
+            {
+                // Journalling is worth having and worth nothing at all compared with the
+                // game continuing to work. Whatever went wrong here stops here.
+                Plugin.Log.Warn($"could not read the controller settings: {e.Message}");
             }
         }
 

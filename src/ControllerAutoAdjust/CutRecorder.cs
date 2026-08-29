@@ -102,8 +102,27 @@ namespace ControllerAutoAdjust
                 .FirstOrDefault(o => o is Component c && c.gameObject.scene.isLoaded);
         }
 
+        internal const string MarkerName = "record-cuts.on";
+
+        /// <summary>
+        /// Whether to record cuts as they are played.
+        /// </summary>
+        /// <remarks>
+        /// Off unless asked for. This exists so the mod still has a source of cuts if replays
+        /// ever stop being available, and while they are available nothing reads what it
+        /// writes -- so left on it hooks the scoring path and writes a file every few seconds
+        /// of every session, for data no one wants. A player should not pay that for a spare
+        /// tyre.
+        /// </remarks>
+        internal static bool Enabled() =>
+            System.IO.File.Exists(System.IO.Path.Combine(Paths.DataDir, MarkerName));
+
         private void Attach(ScoreController controller)
         {
+            if (!Enabled())
+            {
+                return;
+            }
             var sabers = Resources.FindObjectsOfTypeAll<Saber>()
                 .Where(s => s.gameObject.scene.isLoaded)
                 .ToList();
@@ -139,7 +158,40 @@ namespace ControllerAutoAdjust
             }
         }
 
+        /// <summary>
+        /// Guarded because it is called by the game, not by us.
+        /// </summary>
+        /// <remarks>
+        /// An exception raised inside a game callback does not stay in this mod. It unwinds
+        /// through whatever called it, which here is the scoring path a note goes through
+        /// every time it is hit. The same mistake in the anchor handler left a player unable
+        /// to use their controllers, so nothing that happens in here is allowed out.
+        /// </remarks>
         private void OnCut(ScoringElement element)
+        {
+            try
+            {
+                Cut(element);
+            }
+            catch (Exception e)
+            {
+                Plugin.Log.Warn($"could not record a cut: {e.Message}");
+            }
+        }
+
+        private void OnScored(ScoringElement element)
+        {
+            try
+            {
+                Scored(element);
+            }
+            catch (Exception e)
+            {
+                Plugin.Log.Warn($"could not score a cut: {e.Message}");
+            }
+        }
+
+        private void Cut(ScoringElement element)
         {
             _scored++;
             if (!(element is GoodCutScoringElement good))
@@ -189,7 +241,7 @@ namespace ControllerAutoAdjust
             }
         }
 
-        private void OnScored(ScoringElement element)
+        private void Scored(ScoringElement element)
         {
             if (!_inFlight.TryGetValue(element, out var p))
             {

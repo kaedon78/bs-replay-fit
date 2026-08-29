@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using System.Reflection;
 using UnityEngine;
@@ -42,8 +43,45 @@ namespace ControllerAutoAdjust
         private static readonly FieldInfo HelperField = typeof(VRController).GetField(
             "_vrPlatformHelper", BindingFlags.Instance | BindingFlags.NonPublic);
 
+        /// <summary>How many reads have failed, so a persistent one is not logged per frame.</summary>
+        private static int _failures;
+
         /// <summary>Read the live settings, or false if the controllers are not up yet.</summary>
+        /// <remarks>
+        /// Nothing here throws, which is the contract a method named Try has and this one did
+        /// not keep. The offset provider is reachable before it is usable: asked for a
+        /// position offset while the controller is still setting itself up, it goes looking
+        /// for a selected profile that is not there yet and throws. That escaped into the
+        /// game's own setup and cost a player the use of their hands.
+        ///
+        /// A failure gives back false and no reading, never a partial one. Half a reading
+        /// would be journalled as though it were the settings in force, which is a wrong
+        /// answer recorded as fact rather than a step that did not happen.
+        /// </remarks>
         internal static bool TryRead(out Reading reading)
+        {
+            try
+            {
+                return Read(out reading);
+            }
+            catch (Exception e)
+            {
+                reading = default;
+                reading.PlatformHelper = "none";
+                // Once, then rarely. This can fail every frame for as long as a scene takes
+                // to build, and a log that scrolls past at that rate is the thing that was
+                // wrong here in the first place.
+                if (_failures++ % 600 == 0)
+                {
+                    Plugin.Log.Warn(
+                        $"controller settings not readable yet ({e.GetType().Name}); "
+                        + $"attempt {_failures}");
+                }
+                return false;
+            }
+        }
+
+        private static bool Read(out Reading reading)
         {
             reading = default;
             reading.PlatformHelper = "none";

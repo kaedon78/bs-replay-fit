@@ -43,6 +43,14 @@ namespace ControllerAutoAdjust
     /// Points are what is maximised, not centring. Least squares would let a single cut 40 cm
     /// out drag the answer around, where the 15-point term stopped caring about that cut at
     /// 30 cm.
+    ///
+    /// Maximising them is the same thing as maximising accuracy. The gain is reported over
+    /// the most those same cuts could have scored, and that ceiling does not move with the
+    /// offset, so the ratio is the change in accuracy percent rather than a count of points.
+    /// What the search cannot see is the other hundred points a note carries: the swing
+    /// angles before and after the cut. It assumes a few degrees of grip does not move them,
+    /// which holds while a swing clears both thresholds comfortably and is worth measuring
+    /// rather than believing.
     /// </remarks>
     internal static class OffsetSearch
     {
