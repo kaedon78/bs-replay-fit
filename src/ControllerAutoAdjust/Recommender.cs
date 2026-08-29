@@ -227,7 +227,12 @@ namespace ControllerAutoAdjust
                 }
 
                 var cuts = ReplayCuts.Extract(replay, MinCutsPerHand);
-                if (cuts.Left.Cuts == null || cuts.Left.Cuts.Count == 0)
+                // Both hands. The threshold is named per hand and was applied to one of
+                // them, so a run where the right hand barely played was kept, counted toward
+                // the target, and contributed nothing to half the answer. The cache showed
+                // one with zero right-hand cuts sitting among the three hundred.
+                if (cuts.Left.Cuts == null || cuts.Left.Cuts.Count == 0
+                    || cuts.Right.Cuts == null || cuts.Right.Cuts.Count == 0)
                 {
                     Drop($"under {MinCutsPerHand} cuts a hand");
                     continue;

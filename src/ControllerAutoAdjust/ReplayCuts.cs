@@ -14,7 +14,9 @@ namespace ControllerAutoAdjust
     ///
     /// This is the part the live path does not need and the part most able to be quietly
     /// wrong, so both traps found offline are kept explicit. Chain links do not sit at the
-    /// grid cell their packed id names, so they are excluded from the fit. And the timing
+    /// grid cell their packed id names, so they are left out entirely: for a while they were
+    /// only kept out of the depth fit, and the samples happily used the same wrong centre.
+    /// And the timing
     /// deviation runs positive when the cut was *early*, opposite to how it reads -- the fit
     /// discovers that on its own by returning a negative speed, which is why the sign is
     /// fitted rather than assumed.
@@ -106,10 +108,14 @@ namespace ControllerAutoAdjust
                 Cuts = new List<CutSample>(),
             };
 
+            // Chain links are dropped here rather than later, so the minimum-cuts test
+            // counts what will actually be used. Excluding them further down left a hand
+            // that cleared the threshold only on notes that were then thrown away.
             var index = new List<int>();
             for (var i = 0; i < good.Count; i++)
             {
-                if (good[i].Colour == colour)
+                if (good[i].Colour == colour
+                    && good[i].ScoringType != ChainLinkScoringType)
                 {
                     index.Add(i);
                 }
@@ -125,7 +131,6 @@ namespace ControllerAutoAdjust
             var reported = new float[n];
             var drift = new float[n];
             var xy = new Vector2[n];
-            var fittable = new bool[n];
 
             for (var i = 0; i < n; i++)
             {
@@ -137,10 +142,9 @@ namespace ControllerAutoAdjust
                 xy[i] = new Vector2(
                     ColumnX[Mathf.Clamp(note.Column, 0, 3)],
                     RowY[Mathf.Clamp(note.Row, 0, 2)]);
-                fittable[i] = note.ScoringType != ChainLinkScoringType;
             }
 
-            FitDepthAndSpeed(normal, point, reported, drift, xy, fittable,
+            FitDepthAndSpeed(normal, point, reported, drift, xy,
                              out var depth, out var speed);
             result.NoteSpeed = speed;
 
@@ -151,8 +155,16 @@ namespace ControllerAutoAdjust
             for (var i = 0; i < n; i++)
             {
                 var centre = Centre(xy[i], drift[i], depth, speed);
-                var signed = Vector3.Dot(centre - point[i], normal[i]);
-                residuals.Add(Mathf.Abs(Mathf.Abs(signed) - reported[i]));
+                var raw = Vector3.Dot(centre - point[i], normal[i]);
+                residuals.Add(Mathf.Abs(Mathf.Abs(raw) - reported[i]));
+
+                // The reconstruction supplies the side, the game supplies the distance. Only
+                // the side needs rebuilding: which of the two the note centre sits on is a
+                // sign, robust to the centimetre of error the reconstruction carries, while
+                // the distance is recorded exactly and is what the accuracy term is scored
+                // on. Using our own magnitude threw that away and cost about 10 mm a cut
+                // against effects a few times that size.
+                var signed = raw < 0f ? -reported[i] : reported[i];
 
                 var when = good[index[i]].EventTime;
                 var pose = Slerp(replay.FrameTimes, replay.FrameCount, rotations, when);
@@ -181,15 +193,11 @@ namespace ControllerAutoAdjust
 
         private static float Cost(
             Vector3[] normal, Vector3[] point, float[] reported, float[] drift,
-            Vector2[] xy, bool[] fittable, float depth, float speed)
+            Vector2[] xy, float depth, float speed)
         {
             var total = 0f;
             for (var i = 0; i < normal.Length; i++)
             {
-                if (!fittable[i])
-                {
-                    continue;
-                }
                 var gap = Mathf.Abs(Vector3.Dot(Centre(xy[i], drift[i], depth, speed) - point[i],
                                                 normal[i]));
                 var e = gap - reported[i];
@@ -209,7 +217,7 @@ namespace ControllerAutoAdjust
         /// </remarks>
         private static void FitDepthAndSpeed(
             Vector3[] normal, Vector3[] point, float[] reported, float[] drift,
-            Vector2[] xy, bool[] fittable, out float depth, out float speed)
+            Vector2[] xy, out float depth, out float speed)
         {
             depth = 0f;
             speed = 0f;
@@ -219,7 +227,7 @@ namespace ControllerAutoAdjust
             {
                 for (var v = -40f; v <= 40f; v += 1f)
                 {
-                    var cost = Cost(normal, point, reported, drift, xy, fittable, d, v);
+                    var cost = Cost(normal, point, reported, drift, xy, d, v);
                     if (cost < best)
                     {
                         best = cost;
@@ -235,7 +243,7 @@ namespace ControllerAutoAdjust
             {
                 for (var v = v0 - 1f; v <= v0 + 1f; v += 0.05f)
                 {
-                    var cost = Cost(normal, point, reported, drift, xy, fittable, d, v);
+                    var cost = Cost(normal, point, reported, drift, xy, d, v);
                     if (cost < best)
                     {
                         best = cost;

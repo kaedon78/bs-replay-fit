@@ -37,8 +37,12 @@ namespace ControllerAutoAdjust
         /// A stale cache does not fail: it fits confidently on numbers computed by code that
         /// no longer exists. Anything that alters what a cut sample means -- the geometry, the
         /// note-centre reconstruction, the filters -- has to land here too.
+        ///
+        /// Version 2: chain links left out of the samples rather than only out of the depth
+        /// fit, the cut distance taken from the game rather than from our reconstruction of
+        /// it, and the minimum-cuts threshold applied to both hands instead of the left.
         /// </remarks>
-        private const int Version = 1;
+        private const int Version = 2;
 
         private static string Path => System.IO.Path.Combine(Paths.DataDir, FileName);
 
