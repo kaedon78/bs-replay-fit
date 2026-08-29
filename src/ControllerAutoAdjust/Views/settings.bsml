@@ -15,25 +15,40 @@
   </horizontal>
 
   <horizontal pref-height='8' pref-width='90'>
-    <button id='read-button' text='~read-button' on-click='read'
+    <action-button id='read-button' text='~read-button' on-click='read'
             hover-hint='Reads your replay files. Slow, and only needed once per session.'/>
   </horizontal>
 
-  <slider-setting id='from-slider' text='2. Use replays from' value='start-percent'
+  <horizontal pref-height='8' pref-width='90'>
+    <text text='~scope' align='Center' font-size='2.9'/>
+  </horizontal>
+
+  <slider-setting id='from-slider' text='2. Earlier replays: from' value='start-percent'
                   min='0' max='100' increment='2' integer-only='true'
                   formatter='format-session'
-                  hover-hint='Earliest session to fit on. Set this to when you last changed your grip.'/>
+                  hover-hint='Applies only to runs from before this mod was installed. Runs it has a record for are unaffected.'/>
 
-  <slider-setting id='until-slider' text='2. Use replays until' value='end-percent'
+  <slider-setting id='until-slider' text='2. Earlier replays: until' value='end-percent'
                   min='0' max='100' increment='2' integer-only='true'
                   formatter='format-session'
-                  hover-hint='Latest session to fit on.'/>
+                  hover-hint='Applies only to runs from before this mod was installed.'/>
 
-  <list-setting text='2. Those replays were played on' value='profile' choices='profile-choices'
+  <list-setting id='profile-list' text='2. Earlier replays were played on' value='profile' choices='profile-choices'
                 hover-hint='Which controller profile was in use for that range. Replays do not record it.'/>
 
+  <horizontal pref-height='7' pref-width='90' spacing='2'>
+    <button text='Assign that range' on-click='assign'
+            hover-hint='Records the range and profile above as one segment, so several grips can be described.'/>
+    <button text='Clear' on-click='clear-assignments'
+            hover-hint='Forget every assigned range.'/>
+  </horizontal>
+
   <horizontal pref-height='8' pref-width='90'>
-    <button id='fit-button' text='~fit-button' on-click='fit'
+    <text text='~assignments' align='Center' font-size='2.9'/>
+  </horizontal>
+
+  <horizontal pref-height='8' pref-width='90'>
+    <action-button id='fit-button' text='~fit-button' on-click='fit'
             hover-hint='Fits both hands to the range above. Fast, so change the range and refit freely.'/>
   </horizontal>
 

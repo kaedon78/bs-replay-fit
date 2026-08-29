@@ -53,6 +53,18 @@ namespace ControllerAutoAdjust
             public float Statistic;
             public float GapDegrees;
             public int Sessions;
+
+            /// <summary>The window a split could have been found in, if any.</summary>
+            /// <remarks>
+            /// Needed because "no split found" and "could not look" are different answers
+            /// that were being reported with the same words. A change needs sessions either
+            /// side of it to show up, so the newest few and the oldest few are outside what
+            /// this can see -- and a settings change made an hour ago is always in that blind
+            /// spot, which is exactly when a player is most likely to be asking.
+            /// </remarks>
+            public bool Conclusive;
+            public DateTime TestableFrom;
+            public DateTime TestableTo;
         }
 
         internal static Verdict Scan(List<Session> sessions)
@@ -63,6 +75,9 @@ namespace ControllerAutoAdjust
                 return verdict;
             }
             sessions.Sort((a, b) => a.Day.CompareTo(b.Day));
+            verdict.Conclusive = true;
+            verdict.TestableFrom = sessions[MinSessionsPerSide].Day;
+            verdict.TestableTo = sessions[sessions.Count - MinSessionsPerSide].Day;
 
             for (var k = MinSessionsPerSide; k <= sessions.Count - MinSessionsPerSide; k++)
             {

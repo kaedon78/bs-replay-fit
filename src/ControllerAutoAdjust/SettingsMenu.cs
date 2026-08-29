@@ -46,7 +46,7 @@ namespace ControllerAutoAdjust
             }
             foreach (var name in new[]
                      {
-                         nameof(Status), nameof(Advisory), nameof(StartPercent), nameof(EndPercent),
+                         nameof(Status), nameof(Scope), nameof(Advisory), nameof(AssignmentList), nameof(StartPercent), nameof(EndPercent),
                          nameof(ReadButton), nameof(FitButton),
                          nameof(ProfileChoices), nameof(Profile),
                      })
@@ -242,14 +242,14 @@ namespace ControllerAutoAdjust
         public int StartPercent
         {
             get => PercentOf(Preferences.RangeStart, 0);
-            set => Preferences.RangeStart = DayAtPercent(value);
+            set => Preferences.RangeStart = StartAt(SessionAt(value));
         }
 
         [UIValue("end-percent")]
         public int EndPercent
         {
             get => PercentOf(Preferences.RangeEnd, 100);
-            set => Preferences.RangeEnd = DayAtPercent(value);
+            set => Preferences.RangeEnd = EndAt(SessionAt(value));
         }
 
         private static int PercentOf(DateTime? when, int fallback)
@@ -262,8 +262,6 @@ namespace ControllerAutoAdjust
             var i = IndexOf(when, 0);
             return Mathf.RoundToInt(100f * i / (sessions.Count - 1));
         }
-
-        private static DateTime? DayAtPercent(int percent) => DayAt(SessionAt(percent));
 
         private static int SessionAt(float percent)
         {
@@ -284,8 +282,8 @@ namespace ControllerAutoAdjust
             {
                 return "no replays yet";
             }
-            var day = sessions[SessionAt(percent)];
-            return $"{day.Key:d MMM} ({day.Value})";
+            var span = sessions[SessionAt(percent)];
+            return $"{span.Start:d MMM HH:mm} ({span.Runs})";
         }
 
         /// <summary>
@@ -307,7 +305,7 @@ namespace ControllerAutoAdjust
             var closest = double.MaxValue;
             for (var i = 0; i < sessions.Count; i++)
             {
-                var gap = Math.Abs((sessions[i].Key - when.Value.Date).TotalDays);
+                var gap = Math.Abs((sessions[i].Start - when.Value).TotalMinutes);
                 if (gap < closest)
                 {
                     closest = gap;
@@ -317,14 +315,28 @@ namespace ControllerAutoAdjust
             return best;
         }
 
-        private static DateTime? DayAt(int index)
+        /// <summary>The start of a sitting, for the lower bound of a range.</summary>
+        private static DateTime? StartAt(int index)
         {
             var sessions = Advice.Sessions;
-            if (sessions.Count == 0)
-            {
-                return null;
-            }
-            return sessions[Mathf.Clamp(index, 0, sessions.Count - 1)].Key;
+            return sessions.Count == 0
+                ? (DateTime?)null
+                : sessions[Mathf.Clamp(index, 0, sessions.Count - 1)].Start;
+        }
+
+        /// <summary>
+        /// The end of a sitting, for the upper bound.
+        /// </summary>
+        /// <remarks>
+        /// The end rather than the start, so a range whose ends are the same sitting still
+        /// contains it -- otherwise selecting one sitting selects nothing.
+        /// </remarks>
+        private static DateTime? EndAt(int index)
+        {
+            var sessions = Advice.Sessions;
+            return sessions.Count == 0
+                ? (DateTime?)null
+                : sessions[Mathf.Clamp(index, 0, sessions.Count - 1)].End;
         }
 
         /// <summary>
@@ -357,6 +369,75 @@ namespace ControllerAutoAdjust
                 Plugin.Log.Info("already working, or the controllers are not up yet");
             }
             Advice.Publish();
+        }
+
+        /// <summary>
+        /// Records the current range and profile as one assignment, then leaves them free.
+        /// </summary>
+        /// <remarks>
+        /// Built up a range at a time rather than edited as a table, because a table wants a
+        /// dropdown per row and BSML does not do that comfortably -- and this way each entry
+        /// is made with the same three controls the player has already used once.
+        /// </remarks>
+        [UIAction("assign")]
+        public void AssignRange()
+        {
+            var sessions = Advice.Sessions;
+            if (sessions.Count == 0)
+            {
+                return;
+            }
+            var from = Preferences.RangeStart ?? sessions[0].Start;
+            var to = Preferences.RangeEnd ?? sessions[sessions.Count - 1].End;
+            if (!Preferences.TryGetRangeGrip(out var left, out var right, out var alternative))
+            {
+                Plugin.Log.Info("pick which profile that range was played on before assigning");
+                return;
+            }
+            Preferences.AddAssignment(new Preferences.Assignment
+            {
+                From = from,
+                To = to,
+                LeftRotation = left,
+                RightRotation = right,
+                AlternativeHandling = alternative,
+            });
+            Advice.Publish();
+        }
+
+        [UIAction("clear-assignments")]
+        public void ClearAssignments()
+        {
+            Preferences.ClearAssignments();
+            Plugin.Log.Info("assignments cleared");
+            Advice.Publish();
+        }
+
+        [UIValue("assignments")]
+        public string AssignmentList
+        {
+            get
+            {
+                var list = Preferences.Assignments;
+                if (!Recommender.HasRead)
+                {
+                    return "";
+                }
+                if (list.Count == 0)
+                {
+                    return Advice.UnknownRuns == 0
+                        ? ""
+                        : $"No ranges assigned yet, so none of those {Advice.UnknownRuns} runs "
+                          + "will be used.";
+                }
+                var lines = new List<string>();
+                foreach (var a in list)
+                {
+                    lines.Add($"{a.From:d MMM HH:mm} - {a.To:d MMM HH:mm}: "
+                              + $"L {Short(a.LeftRotation)}  R {Short(a.RightRotation)}");
+                }
+                return string.Join("\n", lines);
+            }
         }
 
         [UIValue("read-button")]
@@ -417,6 +498,9 @@ namespace ControllerAutoAdjust
         [UIComponent("until-slider")]
         private SliderSetting _untilSlider;
 
+        [UIComponent("profile-list")]
+        private ListSetting _profileList;
+
         private int _sessionsShown = -1;
 
         internal void RedrawRange()
@@ -469,6 +553,23 @@ namespace ControllerAutoAdjust
                 // a step is already running.
                 _fitButton.interactable = Recommender.HasRead && !Recommender.Running;
             }
+
+            // Greyed rather than merely explained. These govern runs with no recorded
+            // settings, so with none of those left they do nothing at all -- and a live
+            // control that does nothing invites the player to wonder what they broke.
+            var needed = Advice.UnknownRuns > 0 && !Recommender.Running;
+            if (_fromSlider != null)
+            {
+                _fromSlider.Interactable = needed;
+            }
+            if (_untilSlider != null)
+            {
+                _untilSlider.Interactable = needed;
+            }
+            if (_profileList != null)
+            {
+                _profileList.Interactable = needed;
+            }
             if (_fill == null)
             {
                 return;
@@ -485,6 +586,21 @@ namespace ControllerAutoAdjust
         [UIValue("analyse-button")]
         public string AnalyseButton =>
             Recommender.Running ? "Working..." : "Analyse my replays";
+
+        /// <summary>What the controls below actually govern, said plainly.</summary>
+        /// <remarks>
+        /// They apply only to runs from before the journal existed. Anything it covers is
+        /// recorded fact and no answer here can improve on it -- but labelled "use replays
+        /// from", they read as a filter over everything, which is how a control that governs
+        /// a third of the data looked like one that governed all of it.
+        /// </remarks>
+        [UIValue("scope")]
+        public string Scope => !Recommender.HasRead
+            ? ""
+            : Advice.UnknownRuns == 0
+                ? "Every run has recorded settings."
+                : $"The settings below apply to the {Advice.UnknownRuns} runs from before "
+                  + "this mod was installed.";
 
         [UIValue("status")]
         public string Status => Advice.Summary
@@ -512,12 +628,12 @@ namespace ControllerAutoAdjust
                 const int Columns = 16;
                 const string Blocks = "▁▂▃▅▆▇█";
                 var totals = new int[Columns];
-                var first = sessions[0].Key;
-                var span = Math.Max((sessions[sessions.Count - 1].Key - first).TotalDays, 1);
-                foreach (var day in sessions)
+                var first = sessions[0].Start;
+                var width = Math.Max((sessions[sessions.Count - 1].Start - first).TotalDays, 1);
+                foreach (var sitting in sessions)
                 {
-                    var at = (int)((day.Key - first).TotalDays / span * (Columns - 1));
-                    totals[Mathf.Clamp(at, 0, Columns - 1)] += day.Value;
+                    var at = (int)((sitting.Start - first).TotalDays / width * (Columns - 1));
+                    totals[Mathf.Clamp(at, 0, Columns - 1)] += sitting.Runs;
                 }
                 var most = 1;
                 foreach (var total in totals)
@@ -533,7 +649,7 @@ namespace ControllerAutoAdjust
                             Mathf.RoundToInt((float)totals[i] / most * (Blocks.Length - 1)),
                             0, Blocks.Length - 1)];
                 }
-                return $"{first:MMM d} {new string(bar)} {sessions[sessions.Count - 1].Key:MMM d}";
+                return $"{first:MMM d} {new string(bar)} {sessions[sessions.Count - 1].Start:MMM d}";
             }
         }
 
@@ -552,14 +668,31 @@ namespace ControllerAutoAdjust
         internal static volatile string Left = "";
         internal static volatile string Right = "";
 
-        /// <summary>Days that have replays, oldest first, with how many each holds.</summary>
+        /// <summary>A stretch of continuous play, and how many runs it holds.</summary>
+        internal struct Span
+        {
+            public DateTime Start;
+            public DateTime End;
+            public int Runs;
+        }
+
+        /// <summary>Sittings, oldest first. What the range sliders move over.</summary>
         /// <remarks>
-        /// What the range sliders move over. Days rather than a continuous date, so every
-        /// slider position lands on a session that exists -- picking a Tuesday nobody played
+        /// Sittings rather than calendar days, because a settings change happens at a moment
+        /// and not at midnight. Grouped by day, an evening's play before a change and the same
+        /// evening's play after it are one indivisible point -- so a range could not be drawn
+        /// between them, and a change made at 22:49 was unsplittable by construction.
+        ///
+        /// Also why each position lands on play that happened: picking a Tuesday nobody played
         /// is a position that cannot mean anything.
         /// </remarks>
-        internal static volatile List<KeyValuePair<DateTime, int>> Sessions =
-            new List<KeyValuePair<DateTime, int>>();
+        internal static volatile List<Span> Sessions = new List<Span>();
+
+        /// <summary>A gap this long ends a sitting.</summary>
+        internal static readonly TimeSpan SessionGap = TimeSpan.FromMinutes(30);
+
+        /// <summary>Runs with no recorded settings, which are the only ones the panel governs.</summary>
+        internal static volatile int UnknownRuns;
 
         /// <summary>Bumped whenever any of the above changes, so the menu can notice.</summary>
         internal static volatile int Version;

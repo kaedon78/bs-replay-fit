@@ -209,11 +209,13 @@ namespace ControllerAutoAdjust
             // enough -- so a timeline drawn from filenames offers dates with nothing behind
             // them, and a range picked at either end can select no usable data at all while
             // looking perfectly reasonable.
-            Advice.Sessions = found
-                .GroupBy(r => r.Played.Date)
-                .OrderBy(g => g.Key)
-                .Select(g => new KeyValuePair<DateTime, int>(g.Key, g.Count()))
-                .ToList();
+            Advice.Sessions = Sittings(found);
+
+            // Run now rather than at fit time, so the verdict is on screen while the player
+            // is deciding what to tell the panel -- which is the only moment it is any use.
+            var unknown = found.Where(r => !r.FromJournal).ToList();
+            Advice.UnknownRuns = unknown.Count;
+            Advice.Evidence = DescribeTheGap(unknown, found.Count);
 
             residuals.Sort();
 
@@ -287,6 +289,41 @@ namespace ControllerAutoAdjust
             }
         }
 
+        /// <summary>
+        /// Group runs into sittings: continuous play, broken by a gap.
+        /// </summary>
+        /// <remarks>
+        /// A settings change happens at a moment, not at midnight. Grouped by calendar day,
+        /// an evening's play before a change and the same evening's play after it are one
+        /// point that cannot be divided -- so a change made at 22:49 was unsplittable, and
+        /// the range sliders could not describe the very split the player had just made.
+        /// </remarks>
+        private static List<Advice.Span> Sittings(List<ReplayCuts.Extraction> runs)
+        {
+            var spans = new List<Advice.Span>();
+            foreach (var run in runs.OrderBy(r => r.Played))
+            {
+                if (spans.Count > 0)
+                {
+                    var last = spans[spans.Count - 1];
+                    if (run.Played - last.End <= Advice.SessionGap)
+                    {
+                        last.End = run.Played;
+                        last.Runs++;
+                        spans[spans.Count - 1] = last;
+                        continue;
+                    }
+                }
+                spans.Add(new Advice.Span
+                {
+                    Start = run.Played,
+                    End = run.Played,
+                    Runs = 1,
+                });
+            }
+            return spans;
+        }
+
         private static void Fit(OffsetState.Reading reading)
         {
             var runs = _read;
@@ -302,8 +339,8 @@ namespace ControllerAutoAdjust
             // absolute either way, since applying a group's correction to the settings that
             // group was played on lands on the same grip whichever group it came from.
             var groups = new List<(OffsetJournal.Epoch Epoch, List<ReplayCuts.Extraction> Runs)>();
-            var assumed = Assumed(reading);
-            var outsideRange = 0;
+            var assignments = Preferences.Assignments;
+            var unassigned = 0;
             var unknownEpoch = 0;
 
             foreach (var run in runs)
@@ -312,27 +349,45 @@ namespace ControllerAutoAdjust
                 if (!run.FromJournal)
                 {
                     unknownEpoch++;
-                    // The range is the player's word about history the journal cannot vouch
-                    // for. Runs it does cover are recorded fact and are not up for a vote.
-                    if (!Preferences.InRange(run.Played))
+                    // The assignments are the player's word about history the journal cannot
+                    // vouch for. Runs it does cover are recorded fact and are not up for a
+                    // vote. Anything nobody has spoken for is left out rather than guessed at:
+                    // putting cuts from an unknown grip into a group that claims to know its
+                    // own is the error this whole mechanism exists to prevent.
+                    var matched = false;
+                    foreach (var a in assignments)
                     {
-                        outsideRange++;
+                        if (!a.Covers(run.Played))
+                        {
+                            continue;
+                        }
+                        epoch = new OffsetJournal.Epoch
+                        {
+                            LeftRotation = a.LeftRotation,
+                            LeftPosition = reading.Left.TypedPosition,
+                            RightRotation = a.RightRotation,
+                            RightPosition = reading.Right.TypedPosition,
+                            LegacyRotation = reading.LegacyRotation,
+                            LegacyValid = reading.LegacyValid,
+                            AlternativeHandling = a.AlternativeHandling,
+                        };
+                        matched = true;
+                        break;
+                    }
+                    if (!matched)
+                    {
+                        unassigned++;
                         continue;
                     }
-                    epoch = assumed;
                 }
                 Bucket(groups, epoch).Add(run);
             }
 
             Plugin.Log.Info(
-                $"fitting {runs.Count - outsideRange} runs in {groups.Count} settings group(s)"
-                + (outsideRange > 0 ? $"; {outsideRange} outside the chosen dates" : ""));
-            if (unknownEpoch > 0)
-            {
-                Plugin.Log.Warn(
-                    $"{unknownEpoch} runs predate the offset journal, so they are used on the "
-                    + "settings named in the panel rather than on a record");
-            }
+                $"fitting {runs.Count - unassigned} runs in {groups.Count} settings group(s)"
+                + (unassigned > 0
+                    ? $"; {unassigned} of {unknownEpoch} unrecorded runs have no assigned range"
+                    : ""));
 
             Advice.Left = "";
             Advice.Right = "";
@@ -352,11 +407,6 @@ namespace ControllerAutoAdjust
 
             foreach (var group in ordered)
             {
-                if (group.Runs.Any(r => !r.FromJournal))
-                {
-                    CheckTheAssumption(group.Runs);
-                }
-
                 var leftCuts = group.Runs.SelectMany(r => r.Left.Cuts).ToList();
                 var rightCuts = group.Runs.SelectMany(r => r.Right.Cuts).ToList();
                 var trusted = group.Runs.Count >= MinRunsToRecommend;
@@ -384,21 +434,39 @@ namespace ControllerAutoAdjust
                 Advice.Left = $"No group has the {MinRunsToRecommend} runs needed to advise.";
                 Advice.Right = "Widen the date range, or play more.";
             }
-            Advice.Summary = $"Fitted {runs.Count - outsideRange} runs.";
+            Advice.Summary = $"Fitted {runs.Count - unassigned} runs"
+                             + (unassigned > 0 ? $"; {unassigned} unassigned and unused." : ".");
             Advice.Publish();
         }
 
         /// <summary>
-        /// Test the claim that a stretch of history was played on one set of settings.
+        /// What the mod does and does not know about the settings behind these runs.
         /// </summary>
         /// <remarks>
-        /// Whatever the player answered, this is what the replays themselves say. An answer
-        /// about three months ago is a memory; a residual that jumps on a particular date is
-        /// evidence, and it is the one that gets acted on when they disagree.
+        /// Only runs from before the journal existed need the player to say anything. Once it
+        /// has an entry, the settings are recorded fact and no answer of theirs can improve on
+        /// it -- so the panel's controls govern the earlier part alone, and saying which part
+        /// that is stops them reading as a filter over everything.
+        ///
+        /// Whether that earlier part is one grip is measurable, and it is still measured --
+        /// but to the log, not to the panel. The check cannot see a change in the newest or
+        /// oldest few sittings, which includes every change made recently, so it was reporting
+        /// "no split found" exactly when a player had just made one. The player knows their
+        /// own history better than a statistic run over eleven runs, and they can now say so
+        /// directly.
         /// </remarks>
-        private static void CheckTheAssumption(List<ReplayCuts.Extraction> runs)
+        private static string DescribeTheGap(List<ReplayCuts.Extraction> unknown, int total)
         {
-            var sessions = runs
+            if (unknown.Count == 0)
+            {
+                return $"All {total} runs have recorded settings. Nothing to fill in.";
+            }
+            var known = total - unknown.Count;
+            var lead = known > 0
+                ? $"{known} runs have recorded settings; {unknown.Count} predate this mod."
+                : $"All {unknown.Count} runs predate this mod.";
+
+            var sessions = unknown
                 .GroupBy(r => r.Played.Date)
                 .Where(g => g.Count() >= 2)
                 .Select(g => new ChangeDetector.Session
@@ -410,29 +478,25 @@ namespace ControllerAutoAdjust
                 .ToList();
 
             var verdict = ChangeDetector.Scan(sessions);
-            if (verdict.Sessions < 6)
+            if (!verdict.Conclusive)
             {
-                Advice.Evidence = "";
-                return;
+                Plugin.Log.Info(
+                    $"grip-change check: too few sittings ({verdict.Sessions}) to look");
             }
-            Advice.Evidence = verdict.Split
-                ? $"These do not look like one grip: the residual shifts "
-                  + $"{verdict.GapDegrees:F1} deg around {verdict.At:yyyy-MM-dd}."
-                : $"{verdict.Sessions} sessions look consistent "
-                  + $"(largest shift {verdict.GapDegrees:F1} deg).";
-            if (verdict.Split)
+            else if (verdict.Split)
             {
                 Plugin.Log.Warn(
-                    $"these runs do NOT look like one set of settings: the residual shifts "
-                    + $"{verdict.GapDegrees:F1} deg around {verdict.At:yyyy-MM-dd} "
-                    + $"(statistic {verdict.Statistic:F1})");
+                    $"grip-change check: the residual shifts {verdict.GapDegrees:F1} deg around "
+                    + $"{verdict.At:d MMM} (statistic {verdict.Statistic:F1})");
             }
             else
             {
                 Plugin.Log.Info(
-                    $"{verdict.Sessions} sessions look consistent (largest shift "
-                    + $"{verdict.GapDegrees:F1} deg, statistic {verdict.Statistic:F1})");
+                    $"grip-change check: none found between {verdict.TestableFrom:d MMM} and "
+                    + $"{verdict.TestableTo:d MMM}, largest shift {verdict.GapDegrees:F1} deg "
+                    + "(changes outside those dates are not visible to it)");
             }
+            return lead + " Assign the ranges below.";
         }
 
         /// <summary>Two settings are the same epoch if they put the blade in the same place.</summary>
