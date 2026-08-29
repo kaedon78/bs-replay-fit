@@ -96,14 +96,14 @@ namespace ControllerAutoAdjust
                     }
                 }
 
-                if (_registered == null)
+                // Polled even once registered, because being registered does not stay true.
+                if (Time.unscaledTime >= _next)
                 {
-                    if (Time.unscaledTime < _next)
-                    {
-                        return;
-                    }
                     _next = Time.unscaledTime + RetryEvery;
                     Register();
+                }
+                if (_registered == null)
+                {
                     return;
                 }
 
@@ -122,17 +122,39 @@ namespace ControllerAutoAdjust
             }
         }
 
+        /// <summary>
+        /// The BSMLSettings the menu was added to, which is not the same one forever.
+        /// </summary>
+        /// <remarks>
+        /// It is a Zenject singleton, so it lives and dies with its container: reloading the
+        /// menu scene -- which the game does after any settings change, including the one
+        /// this panel's apply button makes -- builds a fresh instance holding an empty list.
+        /// The entry added to the old one goes with it, and the mod simply vanishes from the
+        /// settings list with nothing logged. Comparing instances is what notices.
+        /// </remarks>
+        private static BSMLSettings _addedTo;
+
         internal static void Register()
         {
             try
             {
-                if (_registered != null)
+                var settings = BSMLSettings.Instance;
+                if (_registered != null && ReferenceEquals(settings, _addedTo))
                 {
                     return;
                 }
-                _registered = new SettingsMenu();
-                BSMLSettings.Instance.AddSettingsMenu(MenuName, Resource, _registered);
-                Plugin.Log.Info("settings menu registered");
+                var again = _registered != null;
+                if (!again)
+                {
+                    _registered = new SettingsMenu();
+                }
+                // Keeping the same host across a re-add: BSML parses the markup again and
+                // reassigns every bound field, and the old scene's objects are gone anyway.
+                settings.AddSettingsMenu(MenuName, Resource, _registered);
+                _addedTo = settings;
+                Plugin.Log.Info(again
+                    ? "settings menu re-registered after a scene reload"
+                    : "settings menu registered");
             }
             catch (Exception e)
             {
@@ -140,6 +162,7 @@ namespace ControllerAutoAdjust
                 // just "too early" and the next attempt will succeed. Everything the menu
                 // shows is in the log either way.
                 _registered = null;
+                _addedTo = null;
                 Plugin.Log.Info($"settings menu not ready yet: {e.Message}");
             }
         }
@@ -152,6 +175,7 @@ namespace ControllerAutoAdjust
                 {
                     BSMLSettings.Instance.RemoveSettingsMenu(_registered);
                     _registered = null;
+                    _addedTo = null;
                 }
             }
             catch (Exception e)
