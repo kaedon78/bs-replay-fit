@@ -939,6 +939,31 @@ namespace ControllerAutoAdjust
         private static string Active(GameObject row) =>
             row != null && row.activeSelf ? "1" : "0";
 
+        /// <summary>
+        /// Grey a slider without going through the setting's own property.
+        /// </summary>
+        /// <remarks>
+        /// BSML's setter assigns <c>slider.interactable</c>, and on the version shipping with
+        /// the older game that resolves to HMUI's own <c>new</c> property, which activates an
+        /// increment and a decrement button that BSML never wires up. The result is a null
+        /// reference on every write, thrown out of a method that runs each frame, so the
+        /// progress bar, the collapsing rows, the scrolling and the remaining controls after
+        /// it all stopped with it. Later BSML fixed this by casting to the base first, which
+        /// is what this does: identical behaviour where the property works, and working
+        /// behaviour where it does not.
+        ///
+        /// Sliders declared with buttons would keep theirs live on the old version. Ours are
+        /// not, and a stray arrow is worth less than the frame this used to take down.
+        /// </remarks>
+        private static void Grey(SliderSetting setting, bool wanted)
+        {
+            var slider = setting == null ? null : setting.Slider as Selectable;
+            if (slider != null && slider.interactable != wanted)
+            {
+                slider.interactable = wanted;
+            }
+        }
+
         private static void Show(GameObject row, string content) =>
             Show(row, content.Length > 0);
 
@@ -994,14 +1019,8 @@ namespace ControllerAutoAdjust
             // settings, so with none of those left they do nothing at all -- and a live
             // control that does nothing invites the player to wonder what they broke.
             var needed = Advice.UnknownRuns > 0 && !Recommender.Running;
-            if (_fromSlider != null)
-            {
-                _fromSlider.Interactable = needed;
-            }
-            if (_untilSlider != null)
-            {
-                _untilSlider.Interactable = needed;
-            }
+            Grey(_fromSlider, needed);
+            Grey(_untilSlider, needed);
             if (_profileList != null)
             {
                 _profileList.Interactable = needed;
