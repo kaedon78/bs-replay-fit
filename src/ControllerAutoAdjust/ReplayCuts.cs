@@ -36,6 +36,11 @@ namespace ControllerAutoAdjust
 
         internal class Extraction
         {
+            /// <summary>When it was played, for grouping sessions.</summary>
+            public System.DateTime Played;
+
+            /// <summary>False when the epoch was assumed rather than recorded.</summary>
+            public bool FromJournal;
             public string Song = "";
             public string Difficulty = "";
             public int Score;

@@ -92,6 +92,43 @@ namespace ControllerAutoAdjust
         }
 
         /// <summary>
+        /// The turn these cuts are asking for, by weighted least squares.
+        /// </summary>
+        /// <remarks>
+        /// A continuous estimate, used where the question is "what is this group's residual"
+        /// rather than "which setting should be typed" -- comparing sessions to each other,
+        /// where a grid search's whole-degree steps would quantise away the differences being
+        /// looked for. Least squares is the wrong objective for choosing a setting, because a
+        /// cut 40 cm out drags it while the 15-point term stopped caring at 30, but for
+        /// comparing like with like that bias is the same in every session.
+        /// </remarks>
+        internal static Vector2 FitTurn(IReadOnlyList<CutSample> cuts)
+        {
+            // Normal equations for signed ~ lever * (tx*my - ty*mx), weighted by multiplier.
+            double axx = 0, axy = 0, ayy = 0, bx = 0, by = 0;
+            for (var i = 0; i < cuts.Count; i++)
+            {
+                var c = cuts[i];
+                double u = c.Lever * c.AcrossY;
+                double v = -c.Lever * c.AcrossX;
+                double w = c.Multiplier;
+                axx += w * u * u;
+                axy += w * u * v;
+                ayy += w * v * v;
+                bx += w * u * c.Signed;
+                by += w * v * c.Signed;
+            }
+            var det = axx * ayy - axy * axy;
+            if (System.Math.Abs(det) < 1e-12)
+            {
+                return Vector2.zero;
+            }
+            return new Vector2(
+                (float)((ayy * bx - axy * by) / det),
+                (float)((axx * by - axy * bx) / det));
+        }
+
+        /// <summary>
         /// The best integer setting within <paramref name="capDegrees"/> of the current one.
         /// </summary>
         internal static SearchResult Search(

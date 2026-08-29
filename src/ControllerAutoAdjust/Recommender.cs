@@ -129,7 +129,8 @@ namespace ControllerAutoAdjust
                     // applying a group's correction to the settings that group was played on
                     // lands on the same grip whichever group it came from.
                     var when = File.GetLastWriteTimeUtc(file);
-                    if (!OffsetJournal.TryAt(epochs, when, out var epoch))
+                    var fromJournal = OffsetJournal.TryAt(epochs, when, out var epoch);
+                    if (!fromJournal)
                     {
                         unknownEpoch++;
                         epoch = Assumed(reading);
@@ -141,6 +142,8 @@ namespace ControllerAutoAdjust
                         skipped++;
                         continue;
                     }
+                    cuts.Played = when;
+                    cuts.FromJournal = fromJournal;
                     Bucket(groups, epoch).Add(cuts);
                     speeds.Add(cuts.Left.NoteSpeed);
                     residuals.Add(cuts.Left.MedianResidual);
@@ -168,6 +171,12 @@ namespace ControllerAutoAdjust
 
                 foreach (var group in groups.OrderByDescending(g => g.Runs.Count))
                 {
+                    // Only the assumed group needs checking. Anything the journal covers is
+                    // recorded fact, and re-testing it would only add a chance to be wrong.
+                    if (group.Runs.Any(r => !r.FromJournal))
+                    {
+                        CheckTheAssumption(group.Runs);
+                    }
                     var leftCuts = group.Runs.SelectMany(r => r.Left.Cuts).ToList();
                     var rightCuts = group.Runs.SelectMany(r => r.Right.Cuts).ToList();
                     var trusted = group.Runs.Count >= MinRunsToRecommend;
@@ -185,6 +194,105 @@ namespace ControllerAutoAdjust
             }
         }
 
+        /// <summary>
+        /// Test the claim that a stretch of history was played on one set of settings.
+        /// </summary>
+        /// <remarks>
+        /// Whatever the player answered, this is what the replays themselves say. An answer
+        /// about three months ago is a memory; a residual that jumps on a particular date is
+        /// evidence, and it is the one that gets acted on when they disagree.
+        /// </remarks>
+        private static void CheckTheAssumption(List<ReplayCuts.Extraction> runs)
+        {
+            var answer = Preferences.PriorReplayAnswer;
+            if (answer == Preferences.PriorReplays.DifferentConfig)
+            {
+                Plugin.Log.Warn(
+                    $"{runs.Count} replays predate the journal and you have said they were " +
+                    "played on different settings, so they are reported but not recommended from");
+                return;
+            }
+
+            var sessions = runs
+                .GroupBy(r => r.Played.Date)
+                .Where(g => g.Count() >= 2)
+                .Select(g => new ChangeDetector.Session
+                {
+                    Day = g.Key,
+                    Turn = OffsetSearch.FitTurn(g.SelectMany(r => r.Left.Cuts).ToList()),
+                    Cuts = g.Sum(r => r.Left.Cuts.Count),
+                })
+                .ToList();
+
+            var verdict = ChangeDetector.Scan(sessions);
+            if (verdict.Sessions < 6)
+            {
+                Plugin.Log.Info(
+                    $"only {verdict.Sessions} sessions predate the journal: too few to check " +
+                    "whether the settings held steady across them");
+                return;
+            }
+            if (verdict.Split)
+            {
+                Plugin.Log.Warn(
+                    $"these replays do NOT look like one set of settings: the residual shifts " +
+                    $"{verdict.GapDegrees:F1} deg around {verdict.At:yyyy-MM-dd} " +
+                    $"(statistic {verdict.Statistic:F1}). Pooling across that fits a compromise " +
+                    "suiting neither side.");
+            }
+            else if (answer == Preferences.PriorReplays.Unanswered)
+            {
+                Plugin.Log.Info(
+                    $"{verdict.Sessions} sessions predate the journal and look consistent " +
+                    $"(largest shift {verdict.GapDegrees:F1} deg, statistic {verdict.Statistic:F1}), " +
+                    "but nobody has confirmed they were played on the current settings");
+            }
+            else
+            {
+                Plugin.Log.Info(
+                    $"{verdict.Sessions} sessions predate the journal; you have said they used " +
+                    $"the current settings and the data agrees (largest shift " +
+                    $"{verdict.GapDegrees:F1} deg, statistic {verdict.Statistic:F1})");
+            }
+        }
+
+        /// <summary>Two settings are the same epoch if they put the blade in the same place.</summary>
+        /// <remarks>
+        /// Grouping on the typed numbers splits history that was never really split. A value
+        /// nudged one way and back leaves three journal entries describing one grip, and a
+        /// change confined to Z moves the triple without moving anything at all -- composed
+        /// after the grip's large X tilt it is mostly roll about the blade, and roll cannot
+        /// move a cut plane. Both would fragment a history into groups too small to fit,
+        /// which reads as "not enough data" rather than as a grouping mistake.
+        ///
+        /// Comparing what the settings *do* handles every version of this with one rule, and
+        /// correctly keeps apart epochs that differ only in the legacy offset -- the same
+        /// typed numbers mean different things with and without a controller detected.
+        /// </remarks>
+        private const float SamePositionMetres = 0.001f;
+
+        private static bool SameGrip(OffsetJournal.Epoch a, OffsetJournal.Epoch b)
+        {
+            foreach (var left in new[] { true, false })
+            {
+                var rotA = OffsetMath.Applied(
+                    a.RotationFor(left), left, a.LegacyRotation, a.AlternativeHandling);
+                var rotB = OffsetMath.Applied(
+                    b.RotationFor(left), left, b.LegacyRotation, b.AlternativeHandling);
+                if (Quaternion.Angle(rotA, rotB) > OffsetMath.SameGripDegrees)
+                {
+                    return false;
+                }
+                var posA = left ? a.LeftPosition : a.RightPosition;
+                var posB = left ? b.LeftPosition : b.RightPosition;
+                if ((posA - posB).magnitude > SamePositionMetres)
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         /// <summary>Cuts from one settings epoch, kept together.</summary>
         private static List<ReplayCuts.Extraction> Bucket(
             List<(OffsetJournal.Epoch Epoch, List<ReplayCuts.Extraction> Runs)> groups,
@@ -192,8 +300,7 @@ namespace ControllerAutoAdjust
         {
             foreach (var g in groups)
             {
-                if (g.Epoch.LeftRotation == epoch.LeftRotation
-                    && g.Epoch.RightRotation == epoch.RightRotation)
+                if (SameGrip(g.Epoch, epoch))
                 {
                     return g.Runs;
                 }

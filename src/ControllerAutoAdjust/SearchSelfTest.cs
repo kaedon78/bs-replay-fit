@@ -41,8 +41,76 @@ namespace ControllerAutoAdjust
                        new Vector3(-16.3f, 0f, 0f));
             ok &= NullCase("no offset present", current, true, legacy);
 
+            ok &= Equivalent("Z only, right hand", new Vector3(49f, -9f, -6f),
+                             new Vector3(49f, -9f, 2f), false);
+            ok &= Equivalent("Z only, left hand", new Vector3(44f, -10f, -4f),
+                             new Vector3(44f, -10f, 3f), true);
+            ok &= Equivalent("one degree of Y is not free", new Vector3(49f, -9f, -6f),
+                             new Vector3(49f, -8f, -6f), false, expectSame: false);
+
+            ok &= Sessions("settings held steady", 0f, expectSplit: false);
+            ok &= Sessions("settings moved 5 deg", 5f, expectSplit: true);
+            ok &= Sessions("settings moved 1 deg", 1f, expectSplit: false);
+
             Plugin.Log.Info(ok ? "search self-test: PASS" : "search self-test: FAIL");
             return ok;
+        }
+
+        /// <summary>
+        /// How much two settings actually differ, in the only terms that matter.
+        /// </summary>
+        /// <remarks>
+        /// Z is nearly free and Y is not, and nothing about the typed triples says so. A
+        /// grouping that reads them literally splits a history on changes that moved nothing.
+        /// </remarks>
+        private static bool Equivalent(
+            string name, Vector3 a, Vector3 b, bool left, bool expectSame = true)
+        {
+            var turn = OffsetMath.TurnVector(a, b, left, Vector3.zero, true);
+            var degrees = turn.magnitude * Mathf.Rad2Deg;
+            var same = degrees <= OffsetMath.SameGripDegrees;
+            var pass = same == expectSame;
+            Plugin.Log.Info(
+                $"  {name}: {a} vs {b} differ by {degrees:F2} deg" +
+                $" -> {(pass ? "ok" : "FAILED")}");
+            return pass;
+        }
+
+        /// <summary>
+        /// Sessions with a known jump in them, or none, put through the change detector.
+        /// </summary>
+        /// <remarks>
+        /// The third case expects a one-degree move *not* to be found, and that is the
+        /// intended answer rather than a shortfall. Session-to-session spread on unchanged
+        /// settings is 1.1 to 2.6 degrees, so a shift that size is indistinguishable from a
+        /// player having an ordinary week, and claiming otherwise would cut a history in half
+        /// on noise.
+        /// </remarks>
+        private static bool Sessions(string name, float jumpDegrees, bool expectSplit)
+        {
+            var rng = new System.Random(4242);
+            var sessions = new List<ChangeDetector.Session>();
+            var start = new DateTime(2026, 6, 1);
+            for (var i = 0; i < 30; i++)
+            {
+                // Two degrees of session-to-session wobble, as measured on real replays.
+                var wobble = new Vector2(2f * Gaussian(rng), 2f * Gaussian(rng));
+                var shift = i >= 20 ? new Vector2(jumpDegrees, -jumpDegrees * 0.6f) : Vector2.zero;
+                sessions.Add(new ChangeDetector.Session
+                {
+                    Day = start.AddDays(i),
+                    Turn = (wobble + shift) * Mathf.Deg2Rad,
+                    Cuts = 4000,
+                });
+            }
+
+            var verdict = ChangeDetector.Scan(sessions);
+            var pass = verdict.Split == expectSplit;
+            Plugin.Log.Info(
+                $"  {name}: split={verdict.Split} at {verdict.At:yyyy-MM-dd} " +
+                $"statistic {verdict.Statistic:F2}, gap {verdict.GapDegrees:F2} deg" +
+                $" -> {(pass ? "ok" : "FAILED")}");
+            return pass;
         }
 
         private static bool Case(

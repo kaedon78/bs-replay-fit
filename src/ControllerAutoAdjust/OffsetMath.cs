@@ -26,6 +26,16 @@ namespace ControllerAutoAdjust
     /// </remarks>
     internal static class OffsetMath
     {
+        /// <summary>
+        /// Below this, two settings put the blade in the same place and are one epoch.
+        /// </summary>
+        /// <remarks>
+        /// Shared rather than restated, because a test asserting against a different number
+        /// than the code uses passes and proves nothing. One degree of typed Y turns out to
+        /// be 0.66 degrees of real rotation, so the two thresholds are not interchangeable.
+        /// </remarks>
+        internal const float SameGripDegrees = 0.25f;
+
         /// <summary>The Euler the game feeds to <c>Quaternion.Euler</c> for this hand.</summary>
         internal static Vector3 AppliedEuler(
             Vector3 typed, bool left, Vector3 legacyRotation, bool alternativeHandling)
