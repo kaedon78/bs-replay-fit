@@ -1,0 +1,10 @@
+<Project>
+
+  <!-- Imported after the project body, so $(TargetFramework) is resolved by now. The
+       condition cannot live in the .props file, where it is not yet set. -->
+
+  <ItemGroup Condition="$(TargetFramework.StartsWith('net4'))">
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

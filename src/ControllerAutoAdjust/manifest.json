@@ -1,0 +1,10 @@
+{
+  "$schema": "https://raw.githubusercontent.com/bsmg/BSIPA-MetadataFileSchemas/master/Schemas/BSIPA/plugin.schema.json",
+  "id": "ControllerAutoAdjust",
+  "name": "ControllerAutoAdjust",
+  "author": "Kaedon",
+  "version": "0.1.0",
+  "description": "Measures where your sabers actually cut and suggests a controller offset that lands them closer to centre.",
+  "gameVersion": "1.45.0",
+  "dependsOn": { "BSIPA": "^4.3.0" }
+}

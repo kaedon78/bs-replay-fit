@@ -1,0 +1,8 @@
+bin/
+obj/
+artifacts/
+refs/
+*.user
+.vs/
+__pycache__/
+*.pkl

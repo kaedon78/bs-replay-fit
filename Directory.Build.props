@@ -1,0 +1,34 @@
+<Project>
+
+  <!--
+    Game assemblies are resolved from a version-pinned reference set, never from a live
+    install: Steam auto-updates and BSManager moves things, and a build that silently
+    retargets itself is worse than one that fails.
+
+    $(BSRefDir) defaults to the reference sets already maintained in the BSModUpdater tree
+    on this machine. Anyone else building this should override the three paths below in a
+    Directory.Build.user.props, which is gitignored.
+  -->
+
+  <PropertyGroup>
+    <RepoRoot>$(MSBuildThisFileDirectory)</RepoRoot>
+    <BSGameVersion Condition="'$(BSGameVersion)' == ''">1.45.0</BSGameVersion>
+    <BSRefRoot Condition="'$(BSRefRoot)' == ''">C:\Dev\BSModUpdater\refs\</BSRefRoot>
+
+    <BSRefDir>$(BSRefRoot)$(BSGameVersion)\</BSRefDir>
+    <BSIPARefDir>$(BSRefRoot)bsipa-4.3.7\</BSIPARefDir>
+    <BSModdedInstallDir Condition="'$(BSModdedInstallDir)' == ''">D:\BeatSaberCustom\BSModUpdater\game\1.45.0-modded\</BSModdedInstallDir>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework Condition="'$(TargetFramework)' == '' and '$(TargetFrameworks)' == ''">net472</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <DebugType>portable</DebugType>
+    <!-- Game assemblies are strong-name-less and mismatched by design; don't fail on it. -->
+    <NoWarn>$(NoWarn);MSB3277;CS1701;CS1702</NoWarn>
+  </PropertyGroup>
+
+  <Import Project="$(RepoRoot)Directory.Build.user.props" Condition="Exists('$(RepoRoot)Directory.Build.user.props')" />
+
+</Project>

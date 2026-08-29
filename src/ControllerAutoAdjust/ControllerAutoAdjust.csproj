@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>ControllerAutoAdjust</AssemblyName>
+    <RootNamespace>ControllerAutoAdjust</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="manifest.json" />
+  </ItemGroup>
+
+  <!--
+    Private=false on every one of these. A game assembly copied next to the plugin is loaded
+    instead of the real one, and the failure surfaces as a type-identity error that looks
+    like anything but a stray DLL.
+  -->
+  <ItemGroup>
+    <Reference Include="IPA.Loader">
+      <HintPath>$(BSIPARefDir)IPA.Loader.dll</HintPath><Private>false</Private>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>$(BSIPARefDir)0Harmony.dll</HintPath><Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(BSRefDir)UnityEngine.CoreModule.dll</HintPath><Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.XRModule">
+      <HintPath>$(BSRefDir)UnityEngine.XRModule.dll</HintPath><Private>false</Private>
+    </Reference>
+    <!-- VRController and VRControllerTransformOffset live here. -->
+    <Reference Include="HMLib">
+      <HintPath>$(BSRefDir)HMLib.dll</HintPath><Private>false</Private>
+    </Reference>
+    <Reference Include="Main">
+      <HintPath>$(BSRefDir)Main.dll</HintPath><Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>
