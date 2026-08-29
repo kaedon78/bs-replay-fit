@@ -663,6 +663,66 @@ namespace ControllerAutoAdjust
             }
         }
 
+        private ScrollView _scroll;
+        private string _rowsShown = "";
+        private int _scrollIn = -1;
+
+        /// <summary>
+        /// Follow the fit down the panel as it grows.
+        /// </summary>
+        /// <remarks>
+        /// Pressing fit adds a status line, a bar and then two lines of advice, all below the
+        /// button, and all of it off the bottom of a panel already scrolled to show the
+        /// button. The player pressed it and nothing appeared to happen.
+        ///
+        /// Only on a change in what is on screen, never continuously: a scroll that reasserts
+        /// itself every frame is one the player cannot scroll away from. And only while
+        /// fitting, so reading -- whose progress is at the top -- is left alone.
+        ///
+        /// Two frames late because the content size is stale until the layout has rebuilt
+        /// around the rows that just appeared, and scrolling to the end of a size that
+        /// predates them lands short.
+        /// </remarks>
+        private void KeepTheFitInView(bool fitting)
+        {
+            var shown = string.Concat(
+                fitting ? "f" : "-",
+                Active(_fitStatusRow), Active(_fitProgressRow), Active(_advisoryRow));
+            if (shown != _rowsShown)
+            {
+                _rowsShown = shown;
+                if (fitting)
+                {
+                    _scrollIn = 2;
+                }
+            }
+            if (_scrollIn < 0)
+            {
+                return;
+            }
+            if (_scrollIn-- > 0)
+            {
+                return;
+            }
+            if (_scroll == null && _fitStatusRow != null)
+            {
+                _scroll = _fitStatusRow.GetComponentInParent<ScrollView>(true);
+                // Said once, because not finding it is a silent no-op otherwise, and a
+                // scroll that never happens looks exactly like one that was not wanted.
+                Plugin.Log.Info(_scroll != null
+                    ? "found the settings scroll view"
+                    : "no scroll view above the panel; it will not follow the fit down");
+            }
+            if (_scroll != null)
+            {
+                _scroll.UpdateContentSize();
+                _scroll.ScrollToEnd(true);
+            }
+        }
+
+        private static string Active(GameObject row) =>
+            row != null && row.activeSelf ? "1" : "0";
+
         private static void Show(GameObject row, string content) =>
             Show(row, content.Length > 0);
 
@@ -719,6 +779,7 @@ namespace ControllerAutoAdjust
             }
             Fill(_fill);
             Fill(_fitFill);
+            KeepTheFitInView(fitting);
         }
 
         private static void Fill(Image bar)
