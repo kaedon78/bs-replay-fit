@@ -12,6 +12,17 @@ namespace ControllerAutoAdjust
         public float AcrossY;
         public float Lever;
         public int Multiplier;
+
+        /// <summary>
+        /// Seconds since this hand's previous cut; zero for the first of a run.
+        /// </summary>
+        /// <remarks>
+        /// Not used by the fit. It is here because how fast a hand is being reversed is a
+        /// candidate explanation for the scatter the fit cannot reach, and testing that needs
+        /// the gap held against cuts from the same map rather than across maps of different
+        /// difficulty.
+        /// </remarks>
+        public float SincePrevious;
     }
 
     internal struct SearchResult

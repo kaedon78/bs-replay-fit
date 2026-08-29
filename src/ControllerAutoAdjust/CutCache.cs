@@ -41,8 +41,11 @@ namespace ControllerAutoAdjust
         /// Version 2: chain links left out of the samples rather than only out of the depth
         /// fit, the cut distance taken from the game rather than from our reconstruction of
         /// it, and the minimum-cuts threshold applied to both hands instead of the left.
+        ///
+        /// Version 3: the moment arm measured to the recorded cut point rather than to the
+        /// rebuilt note centre, and the gap since the hand's previous cut carried alongside.
         /// </remarks>
-        private const int Version = 2;
+        private const int Version = 3;
 
         private static string Path => System.IO.Path.Combine(Paths.DataDir, FileName);
 
@@ -153,6 +156,7 @@ namespace ControllerAutoAdjust
                     AcrossY = r.ReadSingle(),
                     Lever = r.ReadSingle(),
                     Multiplier = r.ReadInt32(),
+                    SincePrevious = r.ReadSingle(),
                 });
             }
             return hand;
@@ -172,6 +176,7 @@ namespace ControllerAutoAdjust
                 w.Write(c.AcrossY);
                 w.Write(c.Lever);
                 w.Write(c.Multiplier);
+                w.Write(c.SincePrevious);
             }
         }
     }
