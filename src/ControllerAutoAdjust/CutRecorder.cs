@@ -225,6 +225,39 @@ namespace ControllerAutoAdjust
             }
         }
 
+        /// <summary>
+        /// The settings these cuts were recorded under, written once per file.
+        /// </summary>
+        /// <remarks>
+        /// A cut only means something alongside the offset in force when it was made. Offline
+        /// this had to be inferred from settings not having changed for two months, which
+        /// stops working the moment anything adjusts them -- every session becomes its own
+        /// epoch and none has enough cuts to fit. Stamped here, sessions can be pooled or
+        /// separated on fact.
+        /// </remarks>
+        private static string Header()
+        {
+            if (!OffsetState.TryRead(out var r))
+            {
+                return "{\"header\":1,\"offsets\":\"unavailable\"}";
+            }
+            return new StringBuilder(320)
+                .Append("{\"header\":1,\"alt\":").Append(r.AlternativeHandling ? "true" : "false")
+                .Append(",\"helper\":\"").Append(r.PlatformHelper).Append('"')
+                .Append(",\"legacyValid\":").Append(r.LegacyValid ? "true" : "false")
+                .Append(",\"legacyRot\":").Append(Vec(r.LegacyRotation))
+                .Append(",\"leftRot\":").Append(Vec(r.Left.TypedRotation))
+                .Append(",\"leftPos\":").Append(Vec(r.Left.TypedPosition))
+                .Append(",\"rightRot\":").Append(Vec(r.Right.TypedRotation))
+                .Append(",\"rightPos\":").Append(Vec(r.Right.TypedPosition))
+                .Append(",\"synthetic\":").Append(SwingHarness.Enabled() ? "true" : "false")
+                .Append('}')
+                .ToString();
+        }
+
+        private static string Vec(Vector3 v) =>
+            "[" + Num(v.x, "F4") + "," + Num(v.y, "F4") + "," + Num(v.z, "F4") + "]";
+
         private static string Num(float v, string format) =>
             v.ToString(format, CultureInfo.InvariantCulture);
 
@@ -241,8 +274,9 @@ namespace ControllerAutoAdjust
                     var tag = SwingHarness.Enabled() ? "synthetic" : "cuts";
                     _sessionFile = Path.Combine(
                         Paths.DataDir, $"{tag}-{DateTime.Now:yyyyMMdd-HHmmss}.jsonl");
+                    File.AppendAllText(_sessionFile, Header() + "\n", NoBom);
                 }
-                File.AppendAllText(_sessionFile, string.Join("\n", _lines) + "\n", Encoding.UTF8);
+                File.AppendAllText(_sessionFile, string.Join("\n", _lines) + "\n", NoBom);
                 Plugin.Log.Info(
                     $"wrote {_lines.Count} cuts to {Path.GetFileName(_sessionFile)} "
                     + $"({_good} good of {_scored} scored so far)");
