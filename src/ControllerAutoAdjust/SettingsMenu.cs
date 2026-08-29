@@ -557,6 +557,7 @@ namespace ControllerAutoAdjust
             }
             var model = SettingsWatcher.Model;
             ControllerProfile target = null;
+
             foreach (var profile in Writable())
             {
                 if (Name(profile) == Target)
@@ -575,10 +576,16 @@ namespace ControllerAutoAdjust
             var before = $"L {Short(target.leftController.rotation)} "
                          + $"R {Short(target.rightController.rotation)}";
 
-            // Rotation only. The fit moves the blade by turning the controller; the position
-            // is the player's own and nothing here measured it.
-            target.UpdateControllerOffset(true, target.leftController.position, advice.Left);
-            target.UpdateControllerOffset(false, target.rightController.position, advice.Right);
+            // Rotation only: the fit moves the blade by turning the controller, and nothing
+            // here measured position. But the position has to come from the profile being
+            // played on, not from the one being written to. Writing a fitted grip into an
+            // empty slot took that slot's zeroes, which throws away a placement the player
+            // arrived at by hand and is not a change anybody asked for.
+            var playing = model.selectedProfile ?? target;
+            var leftPosition = playing.leftController.position;
+            var rightPosition = playing.rightController.position;
+            target.UpdateControllerOffset(true, leftPosition, advice.Left);
+            target.UpdateControllerOffset(false, rightPosition, advice.Right);
 
             // The search composed each candidate under this flag to decide where the blade
             // lands, so the profile has to agree with it or the numbers mean something else.
@@ -611,6 +618,9 @@ namespace ControllerAutoAdjust
             model.SaveAsync();
 
             Plugin.Log.Info(
+                $"positions kept from the profile in use: L {OffsetState.Fmt(leftPosition)} "
+                + $"R {OffsetState.Fmt(rightPosition)}");
+            Plugin.Log.Info(
                 $"applied to profile #{target.index + 1}: {before} -> "
                 + $"L {Short(advice.Left)} R {Short(advice.Right)}"
                 + (handlingMoved ? $", handling set to {advice.AlternativeHandling}" : "")
@@ -619,6 +629,7 @@ namespace ControllerAutoAdjust
             // A frame or two late: the write refreshes the controllers, and the poses the
             // journal reads are last frame's until it has.
             _journalIn = 4;
+            ScrollSoon();
 
             Advice.Note = $"Applied to profile #{target.index + 1}"
                           + (wasSelected ? "." : " and switched to it.")
@@ -870,7 +881,7 @@ namespace ControllerAutoAdjust
                 _rowsShown = shown;
                 if (fitting)
                 {
-                    _scrollIn = 2;
+                    ScrollSoon();
                 }
             }
             if (_scrollIn < 0)
@@ -896,6 +907,9 @@ namespace ControllerAutoAdjust
                 _scroll.ScrollToEnd(true);
             }
         }
+
+        /// <summary>Ask for a scroll to the end once the layout has caught up.</summary>
+        private void ScrollSoon() => _scrollIn = 2;
 
         private static string Active(GameObject row) =>
             row != null && row.activeSelf ? "1" : "0";
