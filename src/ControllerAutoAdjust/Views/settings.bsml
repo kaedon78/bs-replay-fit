@@ -1,25 +1,27 @@
-<settings-container xmlns='http://monkeymanboy.com/BSML/'
-                    xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'>
+<settings-container xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'
+                    xsi:noNamespaceSchemaLocation='https://raw.githubusercontent.com/monkeymanboy/BSML-Docs/gh-pages/BSMLSchema.xsd'>
 
-  <text text='~summary' align='Center'/>
-  <text text='~timeline' align='Center'/>
-  <text text='~evidence' align='Center'/>
+  <!-- Wrapped with an explicit height. A bare text has no preferred height, so the
+       container hands it everything left over and the controls end up below the fold. -->
+  <horizontal pref-height='11' pref-width='90'>
+    <text text='~status' align='Center' font-size='3.2'/>
+  </horizontal>
 
-  <slider-setting text='Use replays from'
-                  value='start-index' min='0' max='~session-max' increment='1'
-                  integer-only='true' formatter='format-session' apply-only='false'
+  <slider-setting text='Use replays from' value='start-percent'
+                  min='0' max='100' increment='2' integer-only='true'
+                  formatter='format-session'
                   hover-hint='Earliest session to train on. Set this to when you last changed your grip.'/>
 
-  <slider-setting text='Use replays until'
-                  value='end-index' min='0' max='~session-max' increment='1'
-                  integer-only='true' formatter='format-session' apply-only='false'
+  <slider-setting text='Use replays until' value='end-percent'
+                  min='0' max='100' increment='2' integer-only='true'
+                  formatter='format-session'
                   hover-hint='Latest session to train on.'/>
 
-  <list-setting text='Those replays were played on'
-                value='profile' choices='profile-choices' apply-only='false'
-                hover-hint='Which controller profile was in use for the selected range. Replays do not record it, so this cannot be worked out from the files.'/>
+  <list-setting text='Those replays were played on' value='profile' choices='profile-choices'
+                hover-hint='Which controller profile was in use for that range. Replays do not record it.'/>
 
-  <text text='~left-advice' align='Center'/>
-  <text text='~right-advice' align='Center'/>
+  <horizontal pref-height='9' pref-width='90'>
+    <text text='~advisory' align='Center' font-size='3.2'/>
+  </horizontal>
 
 </settings-container>

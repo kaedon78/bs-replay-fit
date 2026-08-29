@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.Collections.Generic;
 using BeatSaberMarkupLanguage.Attributes;
 using BeatSaber.GameSettings;
@@ -21,8 +22,35 @@ namespace ControllerAutoAdjust
     /// contradicted rather than believed. Answer and evidence, shown together, because
     /// either alone can be wrong in a way that produces a confident-looking number.
     /// </remarks>
-    internal class SettingsMenu
+    internal class SettingsMenu : INotifyPropertyChanged
     {
+        /// <summary>
+        /// BSML reads a bound value once, when the tab is first built.
+        /// </summary>
+        /// <remarks>
+        /// Ingestion takes about a minute and the menu registers in seconds, so whatever the
+        /// panel is showing was almost certainly read before there was anything to say. It
+        /// showed the placeholder and looked, reasonably, like a mod that had done nothing.
+        /// </remarks>
+        public event PropertyChangedEventHandler PropertyChanged;
+
+        private void Refresh()
+        {
+            var changed = PropertyChanged;
+            if (changed == null)
+            {
+                return;
+            }
+            foreach (var name in new[]
+                     {
+                         nameof(Status), nameof(Advisory), nameof(StartPercent), nameof(EndPercent),
+                         nameof(ProfileChoices), nameof(Profile),
+                     })
+            {
+                changed(this, new PropertyChangedEventArgs(name));
+            }
+        }
+
         internal const string MenuName = "Controller Auto Adjust";
         internal const string Resource = "ControllerAutoAdjust.Views.settings.bsml";
 
@@ -43,14 +71,29 @@ namespace ControllerAutoAdjust
             private const float RetryEvery = 2f;
             private float _next;
 
+            private int _shown = -1;
+
             private void Update()
             {
-                if (_registered != null || Time.unscaledTime < _next)
+                if (_registered == null)
                 {
+                    if (Time.unscaledTime < _next)
+                    {
+                        return;
+                    }
+                    _next = Time.unscaledTime + RetryEvery;
+                    Register();
                     return;
                 }
-                _next = Time.unscaledTime + RetryEvery;
-                Register();
+
+                // Raised here rather than where the advice is written: that happens on the
+                // ingestion thread, and a UI notification from off the main thread is a crash
+                // waiting for the right timing.
+                if (_shown != Advice.Version)
+                {
+                    _shown = Advice.Version;
+                    _registered.Refresh();
+                }
             }
         }
 
@@ -92,13 +135,36 @@ namespace ControllerAutoAdjust
             }
         }
 
+        /// <summary>
+        /// The profiles worth offering, labelled so they can be told apart.
+        /// </summary>
+        /// <remarks>
+        /// Untouched presets are left out. An all-default profile describes no grip anybody
+        /// holds, and picking one would quietly set the baseline to zero -- a wrong answer
+        /// that looks like a deliberate one. Labels carry the rotations rather than the index
+        /// because indices repeat: built-in and custom profiles both start at zero, which is
+        /// why the list offered two "#0".
+        /// </remarks>
+        private static List<ControllerProfile> Usable()
+        {
+            var usable = new List<ControllerProfile>();
+            foreach (var profile in SettingsWatcher.Profiles)
+            {
+                if (profile != null && !profile.HasDefaultValues())
+                {
+                    usable.Add(profile);
+                }
+            }
+            return usable;
+        }
+
         [UIValue("profile-choices")]
         public List<object> ProfileChoices
         {
             get
             {
                 var choices = new List<object> { CurrentSettings };
-                foreach (var profile in SettingsWatcher.Profiles)
+                foreach (var profile in Usable())
                 {
                     choices.Add(Describe(profile));
                 }
@@ -111,66 +177,107 @@ namespace ControllerAutoAdjust
         {
             get
             {
-                var index = Preferences.RangeProfile;
-                foreach (var profile in SettingsWatcher.Profiles)
+                if (!Preferences.TryGetRangeGrip(out var left, out var right, out _))
                 {
-                    if (profile.index == index)
+                    return CurrentSettings;
+                }
+                foreach (var profile in Usable())
+                {
+                    if (Near(profile.leftController.rotation, left)
+                        && Near(profile.rightController.rotation, right))
                     {
                         return Describe(profile);
                     }
                 }
-                return CurrentSettings;
+                // The profile it was copied from has since been edited or removed. The numbers
+                // are still the ones chosen, so they are shown rather than silently dropped.
+                return $"L {Short(left)}  R {Short(right)}";
             }
             set
             {
-                foreach (var profile in SettingsWatcher.Profiles)
+                foreach (var profile in Usable())
                 {
                     if (Describe(profile) == value)
                     {
-                        Preferences.RangeProfile = profile.index;
+                        Preferences.SetRangeGrip(
+                            profile.leftController.rotation,
+                            profile.rightController.rotation,
+                            profile.alternativeHandling);
                         return;
                     }
                 }
-                Preferences.RangeProfile = -1;
+                Preferences.SetRangeGrip(null, null, true);
             }
         }
 
+        private static bool Near(Vector3 a, Vector3 b) => (a - b).sqrMagnitude < 1e-4f;
+
         private static string Describe(ControllerProfile profile) =>
-            $"#{profile.index}: L {Short(profile.leftController.rotation)} " +
+            $"L {Short(profile.leftController.rotation)}  " +
             $"R {Short(profile.rightController.rotation)}";
 
         private static string Short(Vector3 v) =>
             $"{Mathf.RoundToInt(v.x)},{Mathf.RoundToInt(v.y)},{Mathf.RoundToInt(v.z)}";
 
-        [UIValue("session-max")]
-        public int SessionMax => Math.Max(Advice.Sessions.Count - 1, 0);
-
-        [UIValue("start-index")]
-        public int StartIndex
+        /// <summary>
+        /// Where in the history each slider sits, as a percentage rather than a session index.
+        /// </summary>
+        /// <remarks>
+        /// BSML fixes a slider's min and max in the markup and does not bind them to a value,
+        /// so a slider cannot be sized to however many sessions a player happens to have. An
+        /// index slider therefore ran 0 to a guessed maximum, and clamped "the latest session"
+        /// down to whatever that guess was -- the "until" field defaulted to the *earliest*
+        /// date, which is the opposite of what it says. A percentage always spans exactly the
+        /// history that exists, whatever its length.
+        /// </remarks>
+        [UIValue("start-percent")]
+        public int StartPercent
         {
-            get => IndexOf(Preferences.RangeStart, 0);
-            set => Preferences.RangeStart = DayAt(value);
+            get => PercentOf(Preferences.RangeStart, 0);
+            set => Preferences.RangeStart = DayAtPercent(value);
         }
 
-        [UIValue("end-index")]
-        public int EndIndex
+        [UIValue("end-percent")]
+        public int EndPercent
         {
-            get => IndexOf(Preferences.RangeEnd, SessionMax);
-            set => Preferences.RangeEnd = DayAt(value);
+            get => PercentOf(Preferences.RangeEnd, 100);
+            set => Preferences.RangeEnd = DayAtPercent(value);
+        }
+
+        private static int PercentOf(DateTime? when, int fallback)
+        {
+            var sessions = Advice.Sessions;
+            if (!when.HasValue || sessions.Count < 2)
+            {
+                return fallback;
+            }
+            var i = IndexOf(when, 0);
+            return Mathf.RoundToInt(100f * i / (sessions.Count - 1));
+        }
+
+        private static DateTime? DayAtPercent(int percent) => DayAt(SessionAt(percent));
+
+        private static int SessionAt(float percent)
+        {
+            var sessions = Advice.Sessions;
+            return sessions.Count == 0
+                ? 0
+                : Mathf.Clamp(
+                    Mathf.RoundToInt(percent / 100f * (sessions.Count - 1)),
+                    0, sessions.Count - 1);
         }
 
         /// <summary>Slider position to something a person can read.</summary>
         [UIAction("format-session")]
-        public string FormatSession(float raw)
+        public string FormatSession(float percent)
         {
             var sessions = Advice.Sessions;
             if (sessions.Count == 0)
             {
-                return "no replays";
+                return "no replays yet";
             }
-            var i = Mathf.Clamp(Mathf.RoundToInt(raw), 0, sessions.Count - 1);
-            var day = sessions[i];
-            return $"{day.Key:yyyy-MM-dd} ({day.Value} runs)";
+            var day = sessions[SessionAt(percent)];
+            return $"{day.Key:d MMM} ({day.Value})";
         }
 
         /// <summary>
@@ -212,12 +319,17 @@ namespace ControllerAutoAdjust
             return sessions[Mathf.Clamp(index, 0, sessions.Count - 1)].Key;
         }
 
-        [UIValue("summary")]
-        public string Summary => Advice.Summary;
+        [UIValue("status")]
+        public string Status => Advice.Summary
+            + (Timeline.Length > 0 ? "\n" + Timeline : "")
+            + (Advice.Evidence.Length > 0 ? "\n" + Advice.Evidence : "");
+
+        [UIValue("advisory")]
+        public string Advisory =>
+            (Advice.Left + (Advice.Right.Length > 0 ? "\n" + Advice.Right : "")).Trim();
 
         /// <summary>Runs per session as a row of blocks, so the shape of the history shows.</summary>
-        [UIValue("timeline")]
-        public string Timeline
+        private string Timeline
         {
             get
             {
@@ -226,31 +338,38 @@ namespace ControllerAutoAdjust
                 {
                     return "";
                 }
-                var most = 1;
+                // Bucketed to a fixed width rather than one glyph per session. A glyph each
+                // made the line forty characters wide, and the container sizes itself to its
+                // widest child -- so the chart quietly stretched the panel until the labels
+                // ran off the left edge.
+                const int Columns = 16;
+                const string Blocks = "▁▂▃▅▆▇█";
+                var totals = new int[Columns];
+                var first = sessions[0].Key;
+                var span = Math.Max((sessions[sessions.Count - 1].Key - first).TotalDays, 1);
                 foreach (var day in sessions)
                 {
-                    most = Math.Max(most, day.Value);
+                    var at = (int)((day.Key - first).TotalDays / span * (Columns - 1));
+                    totals[Mathf.Clamp(at, 0, Columns - 1)] += day.Value;
                 }
-                const string Blocks = "▁▂▃▅▆▇█";
-                var bar = new char[sessions.Count];
-                for (var i = 0; i < sessions.Count; i++)
+                var most = 1;
+                foreach (var total in totals)
                 {
-                    var share = (float)sessions[i].Value / most;
-                    bar[i] = Blocks[Mathf.Clamp(
-                        Mathf.RoundToInt(share * (Blocks.Length - 1)), 0, Blocks.Length - 1)];
+                    most = Math.Max(most, total);
                 }
-                return $"{sessions[0].Key:MMM d}  {new string(bar)}  {sessions[sessions.Count - 1].Key:MMM d}";
+                var bar = new char[Columns];
+                for (var i = 0; i < Columns; i++)
+                {
+                    bar[i] = totals[i] == 0
+                        ? ' '
+                        : Blocks[Mathf.Clamp(
+                            Mathf.RoundToInt((float)totals[i] / most * (Blocks.Length - 1)),
+                            0, Blocks.Length - 1)];
+                }
+                return $"{first:MMM d} {new string(bar)} {sessions[sessions.Count - 1].Key:MMM d}";
             }
         }
 
-        [UIValue("evidence")]
-        public string Evidence => Advice.Evidence;
-
-        [UIValue("left-advice")]
-        public string LeftAdvice => Advice.Left;
-
-        [UIValue("right-advice")]
-        public string RightAdvice => Advice.Right;
     }
 
     /// <summary>What the last ingestion concluded, for anything that wants to show it.</summary>
@@ -274,5 +393,10 @@ namespace ControllerAutoAdjust
         /// </remarks>
         internal static volatile List<KeyValuePair<DateTime, int>> Sessions =
             new List<KeyValuePair<DateTime, int>>();
+
+        /// <summary>Bumped whenever any of the above changes, so the menu can notice.</summary>
+        internal static volatile int Version;
+
+        internal static void Publish() => Version++;
     }
 }

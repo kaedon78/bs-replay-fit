@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using UnityEngine;
 
 namespace ControllerAutoAdjust
 {
@@ -49,17 +50,60 @@ namespace ControllerAutoAdjust
         }
 
         /// <summary>
-        /// Index of the profile the ranged replays were played on, or -1 for "as now".
+        /// The grip the ranged replays were played on, stored as values not a name.
         /// </summary>
         /// <remarks>
-        /// The game keeps several profiles and a player may have moved between them, so
-        /// "were these your current settings" is the wrong question when the right one --
-        /// which profile was it -- has an answer the game still holds the numbers for.
+        /// Storing which profile was picked looked simpler and is wrong twice over. Profile
+        /// indices are not unique -- built-in and custom profiles both start at zero, so the
+        /// list showed two "#0" -- and profiles are editable, so a name resolved later can
+        /// mean different numbers than it did when it was chosen. Taking a copy at the moment
+        /// of choosing records what the player actually meant.
+        ///
+        /// Absent means "as they are now", which is also the state before anyone has said.
         /// </remarks>
-        internal static int RangeProfile
+        internal static bool TryGetRangeGrip(
+            out Vector3 leftRotation, out Vector3 rightRotation, out bool alternativeHandling)
         {
-            get => int.TryParse(ReadKey("rangeProfile"), out var v) ? v : -1;
-            set => WriteKey("rangeProfile", value.ToString());
+            leftRotation = Vector3.zero;
+            rightRotation = Vector3.zero;
+            alternativeHandling = true;
+            var parts = ReadKey("rangeGrip").Split('|');
+            if (parts.Length != 3)
+            {
+                return false;
+            }
+            try
+            {
+                leftRotation = ParseVec(parts[0]);
+                rightRotation = ParseVec(parts[1]);
+                alternativeHandling = parts[2] == "1";
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        internal static void SetRangeGrip(Vector3? left, Vector3? right, bool alternativeHandling)
+        {
+            WriteKey("rangeGrip", left.HasValue && right.HasValue
+                ? Vec(left.Value) + "|" + Vec(right.Value) + "|" + (alternativeHandling ? "1" : "0")
+                : "");
+        }
+
+        private static string Vec(Vector3 v)
+        {
+            var c = System.Globalization.CultureInfo.InvariantCulture;
+            return v.x.ToString("R", c) + "," + v.y.ToString("R", c) + "," + v.z.ToString("R", c);
+        }
+
+        private static Vector3 ParseVec(string raw)
+        {
+            var c = System.Globalization.CultureInfo.InvariantCulture;
+            var n = raw.Split(',');
+            return new Vector3(
+                float.Parse(n[0], c), float.Parse(n[1], c), float.Parse(n[2], c));
         }
 
         internal static bool InRange(DateTime when)
@@ -141,6 +185,6 @@ namespace ControllerAutoAdjust
         }
 
         /// <summary>Whether the player has said anything about the ranged replays yet.</summary>
-        internal static bool RangeProfileAnswered => ReadKey("rangeProfile").Length > 0;
+        internal static bool RangeProfileAnswered => ReadKey("rangeGrip").Length > 0;
     }
 }

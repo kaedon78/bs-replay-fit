@@ -56,11 +56,17 @@ namespace ControllerAutoAdjust
             public bool Failed => FailTime > 0f;
 
             /// <summary>
-            /// Whether the timings mean what the chart says.
+            /// Whether the timings and geometry mean what the chart says.
             /// </summary>
             /// <remarks>
-            /// A speed modifier rescales every interval, and practice mode lets a passage be
-            /// replayed until learned, so neither can be pooled with ordinary runs.
+            /// Only what actually corrupts a cut. A speed modifier rescales every interval and
+            /// practice mode lets a passage be replayed until it is learned, so both change
+            /// what the numbers mean.
+            ///
+            /// Nothing else does. NoFail, no-bombs, no-obstacles and a failed run all leave
+            /// the cuts that happened exactly as they were -- and rejecting them threw away
+            /// well over half of a real library for no reason. A run that ended early is
+            /// simply a shorter run.
             /// </remarks>
             public bool Clean
             {
@@ -70,12 +76,11 @@ namespace ControllerAutoAdjust
                     {
                         switch (m)
                         {
-                            case "FS": case "SF": case "SS": case "SC":
-                            case "OP": case "NA": case "NB": case "NO": case "NF": case "PM":
+                            case "FS": case "SF": case "SS": case "SC": case "PM":
                                 return false;
                         }
                     }
-                    return Speed == 0f && !Failed;
+                    return Speed == 0f;
                 }
             }
         }

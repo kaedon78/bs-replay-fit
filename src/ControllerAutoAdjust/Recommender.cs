@@ -28,15 +28,27 @@ namespace ControllerAutoAdjust
         private const int MinCutsPerHand = 100;
 
         /// <summary>
-        /// How many replays to read, newest first.
+        /// How many usable runs to gather before stopping, newest first.
         /// </summary>
         /// <remarks>
-        /// Reading every replay a BSManager install has kept meant parsing two thousand frame
-        /// streams -- minutes of work and gigabytes of churn -- for an answer that stops
-        /// moving well before that. The offline sweep settled by around 273, and the fit is
-        /// bounded by how much a hand drifts rather than how many cuts are thrown at it.
+        /// Counted in runs that survive filtering rather than files opened. Four hundred
+        /// files gave 217 usable here, and a library heavier in One Saber or short runs would
+        /// give far fewer -- so a file cap controls the cost but not the evidence.
+        ///
+        /// Newest first is not only about cost. The residual drifts one to two degrees a
+        /// month, so older sessions describe a grip the player has partly moved on from, and
+        /// the fit stops improving well before a full library is read: the offline sweep
+        /// settled by around 273 runs.
         /// </remarks>
-        private const int MostRecentReplays = 400;
+        private const int TargetUsableRuns = 300;
+
+        /// <summary>A ceiling on files opened, so an enormous library cannot stall the read.</summary>
+        /// <remarks>
+        /// Reading every replay a BSManager install keeps meant parsing two thousand frame
+        /// streams: minutes of work and gigabytes of churn. This only binds when the target
+        /// above cannot be met, which is itself worth reporting.
+        /// </remarks>
+        private const int MaxFilesToOpen = 1200;
 
         /// <summary>
         /// Runs needed before a group's answer is offered rather than merely reported.
@@ -94,17 +106,55 @@ namespace ControllerAutoAdjust
                     return;
                 }
 
+                // Published before anything is parsed. Session dates are just file
+                // timestamps, and the menu needs a range to build its sliders from the moment
+                // it is opened -- parsing takes a minute, and a panel built in the meantime
+                // gets a zero-length slider and renders nothing at all.
+                // Built from every replay found, not from the ones this pass will open. The
+                // sliders have to span the player's whole history or the earlier part of it
+                // is unreachable, with nothing on screen saying why.
+                Advice.Sessions = files
+                    .Select(f => File.GetLastWriteTimeUtc(f).Date)
+                    .GroupBy(d => d)
+                    .OrderBy(g => g.Key)
+                    .Select(g => new KeyValuePair<DateTime, int>(g.Key, g.Count()))
+                    .ToList();
+                Advice.Summary = $"Reading {files.Count} replays...";
+                Advice.Publish();
+
                 var groups = new List<(OffsetJournal.Epoch Epoch, List<ReplayCuts.Extraction> Runs)>();
                 var used = 0;
                 var skipped = 0;
+                // Counted by reason. "250 skipped" says nothing about whether that is a
+                // library full of One Saber runs or a filter throwing away good data, and
+                // those want opposite responses.
+                var why = new Dictionary<string, int>();
+                void Drop(string reason)
+                {
+                    skipped++;
+                    why[reason] = why.TryGetValue(reason, out var n) ? n + 1 : 1;
+                }
                 var unknownEpoch = 0;
                 var outsideRange = 0;
                 var everySession = new List<DateTime>();
                 var speeds = new List<float>();
                 var residuals = new List<float>();
 
+                var seen = 0;
                 foreach (var file in files)
                 {
+                    if (used >= TargetUsableRuns || seen >= MaxFilesToOpen)
+                    {
+                        break;
+                    }
+                    // Reading four hundred replays takes about a minute, and a panel that
+                    // says nothing for a minute is indistinguishable from one that is broken.
+                    if (++seen % 25 == 0)
+                    {
+                        Advice.Summary = $"Reading replays... {used} of {TargetUsableRuns}";
+                        Advice.Publish();
+                    }
+
                     Bsor.Replay replay;
                     try
                     {
@@ -114,13 +164,18 @@ namespace ControllerAutoAdjust
                     {
                         // Roughly a tenth of a live install's replays do not parse; a
                         // partially written one is unremarkable.
-                        skipped++;
+                        Drop("unreadable");
                         continue;
                     }
 
-                    if (replay.Info.Mode != "Standard" || !replay.Info.Clean)
+                    if (replay.Info.Mode != "Standard")
                     {
-                        skipped++;
+                        Drop($"not Standard ({replay.Info.Mode})");
+                        continue;
+                    }
+                    if (!replay.Info.Clean)
+                    {
+                        Drop("speed or practice modifier");
                         continue;
                     }
 
@@ -141,7 +196,7 @@ namespace ControllerAutoAdjust
                     var cuts = ReplayCuts.Extract(replay, MinCutsPerHand);
                     if (cuts.Left.Cuts == null || cuts.Left.Cuts.Count == 0)
                     {
-                        skipped++;
+                        Drop($"under {MinCutsPerHand} cuts a hand");
                         continue;
                     }
                     cuts.Played = when;
@@ -153,6 +208,7 @@ namespace ControllerAutoAdjust
                     if (!fromJournal && !Preferences.InRange(when))
                     {
                         outsideRange++;
+                        Drop("outside the chosen dates");
                         continue;
                     }
                     Bucket(groups, epoch).Add(cuts);
@@ -170,11 +226,20 @@ namespace ControllerAutoAdjust
                     .ToList();
 
                 Plugin.Log.Info(
-                    $"replays: {used} used, {skipped} skipped, of {files.Count} found"
-                    + (outsideRange > 0 ? $"; {outsideRange} outside the chosen date range" : ""));
-                Advice.Summary = outsideRange > 0
-                    ? $"{used - outsideRange} replays in range, {outsideRange} excluded by it."
-                    : $"{used} replays read, {skipped} skipped.";
+                    $"replays: {used} used, {skipped} skipped, {seen} of {files.Count} opened ("
+                    + string.Join(", ", why.OrderByDescending(k => k.Value)
+                                           .Select(k => $"{k.Value} {k.Key}")) + ")");
+                if (used < TargetUsableRuns && seen >= MaxFilesToOpen)
+                {
+                    Plugin.Log.Warn(
+                        $"stopped after opening {seen} files with only {used} usable runs; "
+                        + "the fit is working with less than it asked for");
+                }
+                Advice.Publish();
+                var biggest = why.Count == 0
+                    ? ""
+                    : why.OrderByDescending(k => k.Value).Select(k => $", {k.Value} {k.Key}").First();
+                Advice.Summary = $"{used} runs used, {seen} replays read{biggest}.";
                 if (unknownEpoch > 0)
                 {
                     Plugin.Log.Warn(
@@ -186,12 +251,19 @@ namespace ControllerAutoAdjust
                     return;
                 }
 
+                Advice.Left = "";
+                Advice.Right = "";
                 residuals.Sort();
                 Plugin.Log.Info(
                     $"note-centre reconstruction: median residual " +
                     $"{residuals[residuals.Count / 2] * 1000f:F1} mm, " +
                     $"fitted note speed {speeds.Average():F1} m/s");
 
+                // The panel shows one answer, so it has to be the one being recommended.
+                // Writing every group's line in turn left whichever came last on screen --
+                // and the last is the smallest, which is exactly the group too thin to act
+                // on. The log carries them all; the panel carries the one that counts.
+                var advised = false;
                 foreach (var group in groups.OrderByDescending(g => g.Runs.Count))
                 {
                     // Only the assumed group needs checking. Anything the journal covers is
@@ -207,8 +279,21 @@ namespace ControllerAutoAdjust
                         $"-- settings left {group.Epoch.LeftRotation} right " +
                         $"{group.Epoch.RightRotation}: {group.Runs.Count} runs" +
                         (trusted ? "" : $" (under {MinRunsToRecommend}: shown, not recommended)"));
-                    Report("   left", leftCuts, group.Epoch.LeftRotation, true, group.Epoch, trusted);
-                    Report("   right", rightCuts, group.Epoch.RightRotation, false, group.Epoch, trusted);
+                    var show = trusted && !advised;
+                    Report("   left", leftCuts, group.Epoch.LeftRotation, true, group.Epoch,
+                           trusted, show);
+                    Report("   right", rightCuts, group.Epoch.RightRotation, false, group.Epoch,
+                           trusted, show);
+                    advised |= show;
+                    Advice.Publish();
+                }
+
+                if (!advised)
+                {
+                    Advice.Left =
+                        $"No group has the {MinRunsToRecommend} runs needed to advise from.";
+                    Advice.Right = "Play more, or widen the date range.";
+                    Advice.Publish();
                 }
             }
             catch (Exception e)
@@ -343,28 +428,18 @@ namespace ControllerAutoAdjust
         /// </remarks>
         private static OffsetJournal.Epoch Assumed(OffsetState.Reading r)
         {
-            var wanted = Preferences.RangeProfile;
-            if (wanted >= 0)
+            if (Preferences.TryGetRangeGrip(out var left, out var right, out var alternative))
             {
-                foreach (var profile in SettingsWatcher.Profiles)
+                return new OffsetJournal.Epoch
                 {
-                    if (profile.index != wanted)
-                    {
-                        continue;
-                    }
-                    return new OffsetJournal.Epoch
-                    {
-                        LeftRotation = profile.leftController.rotation,
-                        LeftPosition = profile.leftController.position,
-                        RightRotation = profile.rightController.rotation,
-                        RightPosition = profile.rightController.position,
-                        LegacyRotation = r.LegacyRotation,
-                        LegacyValid = r.LegacyValid,
-                        AlternativeHandling = profile.alternativeHandling,
-                    };
-                }
-                Plugin.Log.Warn($"profile #{wanted} was named for the earlier replays but no " +
-                                "longer exists; falling back to the current settings");
+                    LeftRotation = left,
+                    LeftPosition = r.Left.TypedPosition,
+                    RightRotation = right,
+                    RightPosition = r.Right.TypedPosition,
+                    LegacyRotation = r.LegacyRotation,
+                    LegacyValid = r.LegacyValid,
+                    AlternativeHandling = alternative,
+                };
             }
             return new OffsetJournal.Epoch
             {
@@ -380,7 +455,7 @@ namespace ControllerAutoAdjust
 
         private static void Report(
             string name, List<CutSample> cuts, Vector3 current, bool left,
-            OffsetJournal.Epoch epoch, bool trusted = true)
+            OffsetJournal.Epoch epoch, bool trusted = true, bool show = true)
         {
             if (cuts.Count == 0)
             {
@@ -399,6 +474,10 @@ namespace ControllerAutoAdjust
                 $"| worth {found.GainFraction:P3} of score" +
                 (trusted ? "" : " [too few runs to act on]"));
 
+            if (!show)
+            {
+                return;
+            }
             var line = trusted
                 ? $"{name.Trim()}: {current} -> {found.Setting}, worth {found.GainFraction:P2}"
                 : $"{name.Trim()}: too few runs to advise ({cuts.Count:N0} cuts)";
@@ -453,10 +532,9 @@ namespace ControllerAutoAdjust
                     Plugin.Log.Warn($"could not list {folder}: {e.Message}");
                 }
             }
-            return files
-                .OrderByDescending(File.GetLastWriteTimeUtc)
-                .Take(MostRecentReplays)
-                .ToList();
+            // Every replay found, newest first. The caller decides how far down to read;
+            // the full list is what the session timeline is built from.
+            return files.OrderByDescending(File.GetLastWriteTimeUtc).ToList();
         }
     }
 }
