@@ -470,36 +470,59 @@ namespace ControllerAutoAdjust
             Advice.Publish();
         }
 
+        /// <summary>
+        /// Held between changes, because reading it is not free.
+        /// </summary>
+        /// <remarks>
+        /// It opens the preferences file and walks every run to count what each range covers.
+        /// That was fine while it was read once per change, and stopped being fine when the
+        /// row began collapsing itself, which asks every frame whether there is anything in
+        /// it. Keyed on the advice version, which is bumped by everything that could alter
+        /// the answer.
+        /// </remarks>
+        private int _listedFor = -1;
+        private string _listed = "";
+
         [UIValue("assignments")]
         public string AssignmentList
         {
             get
             {
-                var list = Preferences.Assignments;
-                if (!Recommender.HasRead)
+                if (_listedFor != Advice.Version)
                 {
-                    return "";
+                    _listedFor = Advice.Version;
+                    _listed = BuildAssignmentList();
                 }
-                if (list.Count == 0)
-                {
-                    return Advice.UnknownRuns == 0
-                        ? ""
-                        : $"No ranges assigned, so none of those {Advice.UnknownRuns} runs "
-                          + "will be used.";
-                }
-
-                // Each line carries how many runs it actually covers. A range that reads
-                // plausibly and holds nothing is the failure worth catching here: the dates
-                // look right, and the fit quietly has less than it appears to.
-                var lines = new List<string>();
-                foreach (var a in list)
-                {
-                    lines.Add($"{a.From:d MMM HH:mm} - {a.To:d MMM HH:mm}  "
-                              + $"L {Short(a.LeftRotation)} R {Short(a.RightRotation)}  "
-                              + $"[{Recommender.RunsCoveredBy(a)} runs]");
-                }
-                return string.Join("\n", lines);
+                return _listed;
             }
+        }
+
+        private string BuildAssignmentList()
+        {
+            var list = Preferences.Assignments;
+            if (!Recommender.HasRead)
+            {
+                return "";
+            }
+            if (list.Count == 0)
+            {
+                return Advice.UnknownRuns == 0
+                    ? ""
+                    : $"No ranges assigned, so none of those {Advice.UnknownRuns} runs "
+                      + "will be used.";
+            }
+
+            // Each line carries how many runs it actually covers. A range that reads
+            // plausibly and holds nothing is the failure worth catching here: the dates
+            // look right, and the fit quietly has less than it appears to.
+            var lines = new List<string>();
+            foreach (var a in list)
+            {
+                lines.Add($"{a.From:d MMM HH:mm} - {a.To:d MMM HH:mm}  "
+                          + $"L {Short(a.LeftRotation)} R {Short(a.RightRotation)}  "
+                          + $"[{Recommender.RunsCoveredBy(a)} runs]");
+            }
+            return string.Join("\n", lines);
         }
 
         [UIValue("read-button")]
@@ -530,6 +553,38 @@ namespace ControllerAutoAdjust
 
         [UIObject("progress-row")]
         private GameObject _progressRow;
+
+        /// <summary>
+        /// Rows that vanish when they have nothing to say.
+        /// </summary>
+        /// <remarks>
+        /// Each holds one line that is empty most of the time -- no advice until a fit has
+        /// run, no feedback until a button is pressed -- and a fixed height for an empty line
+        /// is dead space in a panel that scrolls. It costs most at the end: the trailing gap
+        /// is what the view is filled with at full scroll, pushing the assigned ranges off
+        /// the top of it.
+        ///
+        /// A height bound from code would do the same, but BSML will not bind a numeric
+        /// attribute, which is what defeated the slider bounds earlier. Deactivating the row
+        /// takes it out of the layout entirely, and the layout closes up on its own.
+        /// </remarks>
+        [UIObject("status-row")]
+        private GameObject _statusRow;
+
+        [UIObject("timeline-row")]
+        private GameObject _timelineRow;
+
+        [UIObject("assignments-row")]
+        private GameObject _assignmentsRow;
+
+        [UIObject("evidence-row")]
+        private GameObject _evidenceRow;
+
+        [UIObject("note-row")]
+        private GameObject _noteRow;
+
+        [UIObject("advisory-row")]
+        private GameObject _advisoryRow;
 
         /// <summary>
         /// The buttons, so they can be greyed rather than merely labelled.
@@ -599,12 +654,30 @@ namespace ControllerAutoAdjust
             }
         }
 
+        private static void Show(GameObject row, string content) =>
+            Show(row, content.Length > 0);
+
+        private static void Show(GameObject row, bool wanted)
+        {
+            if (row != null && row.activeSelf != wanted)
+            {
+                row.SetActive(wanted);
+            }
+        }
+
         internal void DrawProgress()
         {
             if (_progressRow != null)
             {
                 _progressRow.SetActive(Recommender.Running);
             }
+            Show(_statusRow, Status);
+            Show(_timelineRow, Advice.Sessions.Count > 0);
+            Show(_assignmentsRow, AssignmentList);
+            Show(_evidenceRow, EvidenceLine);
+            Show(_noteRow, ActionNote);
+            Show(_advisoryRow, Advisory);
+
             if (_readButton != null)
             {
                 _readButton.interactable = !Recommender.Running;

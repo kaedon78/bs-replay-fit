@@ -7,14 +7,14 @@
        Height for two lines and then some: a text overflowing its box is centred on the box,
        so it spills equally above and below, and the half above the first row is outside the
        scroll viewport entirely. There is no scrolling up to reach it. -->
-  <horizontal pref-height='6' pref-width='90'>
+  <horizontal id='status-row' pref-height='6' pref-width='90'>
     <text text='~status' align='Center' font-size='3.2'/>
   </horizontal>
 
   <!-- Monospaced, so the bars sit under one another rather than drifting with glyph width,
        and at a cell narrow enough that the row can afford enough bars to show the shape of
        a history rather than one bar per month. -->
-  <horizontal pref-height='8' pref-width='90'>
+  <horizontal id='timeline-row' pref-height='8' pref-width='90'>
     <text text='~timeline' align='Center' font-size='2.2' rich-text='true'/>
   </horizontal>
 
@@ -31,7 +31,7 @@
   </horizontal>
 
   <!-- Directly over the controls it talks about: the line ends "assigned below". -->
-  <horizontal pref-height='7' pref-width='90'>
+  <horizontal id='evidence-row' pref-height='7' pref-width='90'>
     <text text='~evidence' align='Center' font-size='2.9'/>
   </horizontal>
 
@@ -39,7 +39,7 @@
        the rest of the panel builds on, and below the buttons they were off the bottom of the
        viewport, so a panel at its resting scroll position said nothing about what had been
        assigned to it. -->
-  <horizontal pref-height='12' pref-width='90'>
+  <horizontal id='assignments-row' pref-height='12' pref-width='90'>
     <text text='~assignments' align='Center' font-size='2.9'/>
   </horizontal>
 
@@ -62,15 +62,15 @@
                 hover-hint='Which controller profile was in use for that range. Replays do not record it.'/>
 
   <horizontal pref-height='7' pref-width='90' spacing='2'>
-    <button text='Assign that range' on-click='assign'
+    <button text='Assign range' on-click='assign'
             hover-hint='Records the range and profile above as one segment, so several grips can be described.'/>
-    <button text='Remove last' on-click='remove-last'
+    <button text='Remove Last Range' on-click='remove-last'
             hover-hint='Forget the most recent assigned range.'/>
-    <button text='Clear' on-click='clear-assignments'
+    <button text='Clear Ranges' on-click='clear-assignments'
             hover-hint='Forget every assigned range.'/>
   </horizontal>
 
-  <horizontal pref-height='5' pref-width='90'>
+  <horizontal id='note-row' pref-height='5' pref-width='90'>
     <text text='~note' align='Center' font-size='2.9'/>
   </horizontal>
 
@@ -79,7 +79,7 @@
             hover-hint='Fits both hands to the range above. Fast, so change the range and refit freely.'/>
   </horizontal>
 
-  <horizontal pref-height='9' pref-width='90'>
+  <horizontal id='advisory-row' pref-height='9' pref-width='90'>
     <text text='~advisory' align='Center' font-size='3.2'/>
   </horizontal>
 
