@@ -51,6 +51,9 @@
     </Reference>
     <!-- BSML ships as a mod rather than with the game, so it is resolved from the modded
          install. Assembly name and file name differ; the HintPath is what resolves. -->
+    <Reference Include="UnityEngine.UI">
+      <HintPath>$(BSRefDir)UnityEngine.UI.dll</HintPath><Private>false</Private>
+    </Reference>
     <Reference Include="BeatSaberMarkupLanguage">
       <HintPath>$(BSModdedInstallDir)Plugins\BSML.dll</HintPath><Private>false</Private>
     </Reference>

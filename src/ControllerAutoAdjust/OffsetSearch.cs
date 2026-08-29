@@ -21,6 +21,10 @@ namespace ControllerAutoAdjust
         public float GainFraction;
         public int Cuts;
         public bool Found;
+
+        /// <summary>How much of the grid was actually distinct, for judging the dedup.</summary>
+        public int Candidates;
+        public int DistinctTurns;
     }
 
     /// <summary>
@@ -78,6 +82,26 @@ namespace ControllerAutoAdjust
             // a translation's effect would be flat in reach, which is what separates them.
             var moved = c.Signed - c.Lever * (turn.x * c.AcrossY - turn.y * c.AcrossX);
             return Mathf.Abs(moved);
+        }
+
+        /// <summary>
+        /// The same sum over flat arrays, which is the form the search runs millions of times.
+        /// </summary>
+        /// <remarks>
+        /// Arrays rather than <c>IReadOnlyList</c>, which costs an interface dispatch per
+        /// element when the element count is every cut times every candidate. The per-cut
+        /// terms are folded in advance too, since none of them depend on the candidate.
+        /// </remarks>
+        private static float ScoreFlat(
+            float[] signed, float[] alongY, float[] alongX, float[] weight, Vector2 turn)
+        {
+            var total = 0f;
+            for (var i = 0; i < signed.Length; i++)
+            {
+                var moved = signed[i] - (turn.x * alongY[i] + turn.y * alongX[i]);
+                total += weight[i] * AccuracyPoints(moved < 0f ? -moved : moved);
+            }
+            return total;
         }
 
         /// <summary>Weighted accuracy points these cuts would have scored under a turn.</summary>
@@ -138,7 +162,8 @@ namespace ControllerAutoAdjust
             Vector3 legacyRotation,
             bool alternativeHandling,
             float capDegrees = 5f,
-            int spanDegrees = 9)
+            int spanDegrees = 9,
+            System.Action<float> onProgress = null)
         {
             var result = new SearchResult { Setting = currentSetting, Cuts = cuts.Count };
             if (cuts.Count == 0)
@@ -146,12 +171,51 @@ namespace ControllerAutoAdjust
                 return result;
             }
 
-            var baseline = Score(cuts, Vector2.zero);
             var worth = 0f;
+            var maxLever = 0f;
             for (var i = 0; i < cuts.Count; i++)
             {
                 worth += cuts[i].Multiplier * 115f;
+                maxLever = Mathf.Max(maxLever, Mathf.Abs(cuts[i].Lever));
             }
+
+            // Flattened, and pruned of cuts that no candidate can move into scoring range. A
+            // turn shifts a cut by at most lever times the turn's magnitude -- the across-blade
+            // normal is a unit vector, so that product bounds it -- and anything already
+            // further out than the 30 cm cut-off plus that bound scores zero under every
+            // candidate alike. Removing them takes the same constant out of every score
+            // instead of changing any comparison between them.
+            var reachable = maxLever * capDegrees * Mathf.Deg2Rad;
+            var beyond = FullAccuracyMetres + reachable;
+            var count = 0;
+            for (var i = 0; i < cuts.Count; i++)
+            {
+                if (Mathf.Abs(cuts[i].Signed) <= beyond)
+                {
+                    count++;
+                }
+            }
+
+            var signed = new float[count];
+            var alongY = new float[count];
+            var alongX = new float[count];
+            var weight = new float[count];
+            var at = 0;
+            for (var i = 0; i < cuts.Count; i++)
+            {
+                var c = cuts[i];
+                if (Mathf.Abs(c.Signed) > beyond)
+                {
+                    continue;
+                }
+                signed[at] = c.Signed;
+                alongY[at] = c.Lever * c.AcrossY;
+                alongX[at] = -c.Lever * c.AcrossX;
+                weight[at] = c.Multiplier;
+                at++;
+            }
+
+            var baseline = ScoreFlat(signed, alongY, alongX, weight, Vector2.zero);
 
             var origin = new Vector3(
                 Mathf.Round(currentSetting.x),
@@ -159,7 +223,6 @@ namespace ControllerAutoAdjust
                 Mathf.Round(currentSetting.z));
 
             var scored = new List<(Vector3 Setting, Vector2 Turn, float Score)>();
-            var best = baseline;
             for (var dx = -spanDegrees; dx <= spanDegrees; dx++)
             {
                 for (var dy = -spanDegrees; dy <= spanDegrees; dy++)
@@ -169,17 +232,46 @@ namespace ControllerAutoAdjust
                         var trial = origin + new Vector3(dx, dy, dz);
                         var turn = OffsetMath.TurnVector(
                             currentSetting, trial, left, legacyRotation, alternativeHandling);
-                        if (turn.magnitude * Mathf.Rad2Deg > capDegrees + 1e-4f)
+                        if (turn.magnitude * Mathf.Rad2Deg <= capDegrees + 1e-4f)
                         {
-                            continue;
-                        }
-                        var score = Score(cuts, turn);
-                        scored.Add((trial, turn, score));
-                        if (score > best)
-                        {
-                            best = score;
+                            scored.Add((trial, turn, 0f));
                         }
                     }
+                }
+            }
+
+            // One sweep per *distinct* turn. Many integer triples describe the same rotation
+            // -- Z is very nearly free, so its entire range collapses to one turn -- and
+            // scoring each separately repeats an identical hundred-thousand-cut sweep about
+            // twenty times for one answer. Grouping on the turn that comes out, rather than
+            // on which axis is assumed degenerate, keeps the saving wherever the geometry
+            // happens to put it.
+            var best = baseline;
+            var byTurn = new Dictionary<long, float>();
+            var done = 0;
+            var nextReport = 0;
+            for (var i = 0; i < scored.Count; i++)
+            {
+                if (onProgress != null && ++done >= nextReport)
+                {
+                    nextReport = done + Mathf.Max(scored.Count / 20, 1);
+                    onProgress((float)done / scored.Count);
+                }
+
+                var turn = scored[i].Turn;
+                // Quantised to a thousandth of a degree. Two turns closer than that cannot
+                // move any cut far enough to change a term that is rounded to whole points.
+                var key = ((long)Mathf.RoundToInt(turn.x * 57295.8f) << 32)
+                          ^ (uint)Mathf.RoundToInt(turn.y * 57295.8f);
+                if (!byTurn.TryGetValue(key, out var score))
+                {
+                    score = ScoreFlat(signed, alongY, alongX, weight, turn);
+                    byTurn[key] = score;
+                }
+                scored[i] = (scored[i].Setting, turn, score);
+                if (score > best)
+                {
+                    best = score;
                 }
             }
 
@@ -210,8 +302,12 @@ namespace ControllerAutoAdjust
 
             result.Setting = bestSetting;
             result.Turn = bestTurn;
-            result.GainFraction = worth > 0f ? (Score(cuts, bestTurn) - baseline) / worth : 0f;
+            result.GainFraction = worth > 0f
+                ? (ScoreFlat(signed, alongY, alongX, weight, bestTurn) - baseline) / worth
+                : 0f;
             result.Found = true;
+            result.DistinctTurns = byTurn.Count;
+            result.Candidates = scored.Count;
             return result;
         }
     }

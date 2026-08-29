@@ -8,19 +8,23 @@ using UnityEngine;
 namespace ControllerAutoAdjust
 {
     /// <summary>
-    /// Reads the player's replays and works out what their grip is asking for.
+    /// Reads the player's replays, then works out what their grip is asking for.
     /// </summary>
     /// <remarks>
-    /// Replays are the primary source because they already exist. A player installing this
-    /// has months of them, so the mod can answer on the first launch instead of asking for
-    /// twenty runs before it says anything -- and again after every adjustment.
+    /// Three steps, deliberately apart. Reading several hundred replays is a minute and a
+    /// half; fitting both hands is twenty seconds; and between them sits a choice only the
+    /// player can make -- which stretch of history was played on one grip, and which profile
+    /// that was. Doing all three at once meant adjusting the date range by a week cost the
+    /// full read again, for cuts that had not changed.
     ///
-    /// The offsets each replay was played under come from the journal. Before the journal
-    /// existed there is no record, so those replays are usable only on the assumption the
-    /// player's grip has not changed across them. That assumption is stated in the log rather
-    /// than folded silently into the number.
+    /// So the read is cached and the fit runs against it. Changing the range or the profile
+    /// re-fits in seconds without touching a file.
+    ///
+    /// Replays are the source because they already exist: a player installing this has months
+    /// of them, and the mod can answer on the first launch rather than asking for twenty runs
+    /// before it says anything, and again after every adjustment.
     /// </remarks>
-    internal class Recommender : MonoBehaviour
+    internal static class Recommender
     {
         internal const string ExtraFoldersFile = "replay-folders.txt";
 
@@ -31,9 +35,9 @@ namespace ControllerAutoAdjust
         /// How many usable runs to gather before stopping, newest first.
         /// </summary>
         /// <remarks>
-        /// Counted in runs that survive filtering rather than files opened. Four hundred
-        /// files gave 217 usable here, and a library heavier in One Saber or short runs would
-        /// give far fewer -- so a file cap controls the cost but not the evidence.
+        /// Counted in runs that survive filtering rather than files opened. Four hundred files
+        /// gave 217 usable here, and a library heavier in One Saber or short runs would give
+        /// far fewer -- so a file cap bounds the cost without bounding the evidence.
         ///
         /// Newest first is not only about cost. The residual drifts one to two degrees a
         /// month, so older sessions describe a grip the player has partly moved on from, and
@@ -43,11 +47,6 @@ namespace ControllerAutoAdjust
         private const int TargetUsableRuns = 300;
 
         /// <summary>A ceiling on files opened, so an enormous library cannot stall the read.</summary>
-        /// <remarks>
-        /// Reading every replay a BSManager install keeps meant parsing two thousand frame
-        /// streams: minutes of work and gigabytes of churn. This only binds when the target
-        /// above cannot be met, which is itself worth reporting.
-        /// </remarks>
         private const int MaxFilesToOpen = 1200;
 
         /// <summary>
@@ -56,287 +55,272 @@ namespace ControllerAutoAdjust
         /// <remarks>
         /// Measured, not chosen: telling a one-degree change apart takes 10 to 22 runs,
         /// because two runs of the same map on unchanged settings differ by 4 to 6 accuracy
-        /// points and the whole prize is about 2. A seven-run group in testing claimed 1.3%
-        /// -- four times the ceiling any fixed offset has been measured to reach -- and
-        /// disagreed by four degrees with the same hand fitted on 143 runs. Both cannot be
-        /// right, and the small one is the one that is wrong.
+        /// points and the whole prize is about 2. A seven-run group in testing claimed 1.3% --
+        /// four times the ceiling any fixed offset has been measured to reach -- and disagreed
+        /// by four degrees with the same hand fitted on 143 runs. Both cannot be right, and
+        /// the small one is the one that is wrong.
         /// </remarks>
         private const int MinRunsToRecommend = 20;
 
-        /// <summary>How often to check whether the controllers are up yet.</summary>
-        private const float WatchEvery = 2f;
+        private static Thread _worker;
+        private static volatile bool _running;
 
-        private Thread _worker;
-        private volatile bool _started;
-        private float _nextWatch;
+        /// <summary>Every replay read, kept so the fit can be re-run without reading again.</summary>
+        private static volatile List<ReplayCuts.Extraction> _read =
+            new List<ReplayCuts.Extraction>();
 
-        private void Update()
+        internal static bool Running => _running;
+
+        internal static int RunsRead => _read.Count;
+
+        internal static bool HasRead => _read.Count > 0;
+
+        /// <summary>Step one: read the replays. Slow, and only needed once.</summary>
+        internal static bool BeginRead() => Start(reading => Read(reading));
+
+        /// <summary>Step three: fit both hands to whatever step one read.</summary>
+        internal static bool BeginFit() => Start(reading => Fit(reading));
+
+        /// <summary>
+        /// Run a step on a worker, having read the live settings on the main thread.
+        /// </summary>
+        /// <remarks>
+        /// The settings hang off Unity objects, so they are captured here and the worker never
+        /// touches the scene.
+        /// </remarks>
+        private static bool Start(Action<OffsetState.Reading> step)
         {
-            if (Time.unscaledTime < _nextWatch)
+            if (_running || !OffsetState.TryRead(out var reading))
             {
-                return;
+                return false;
             }
-            _nextWatch = Time.unscaledTime + WatchEvery;
-
-            if (_started)
+            _running = true;
+            _worker = new Thread(() =>
             {
-                return;
-            }
-            // Read on the main thread: the live settings hang off Unity objects. Keeping
-            // them current is SettingsWatcher's job, not this one's.
-            if (!OffsetState.TryRead(out var reading))
-            {
-                return;
-            }
-            _started = true;
-            var epochs = OffsetJournal.Read();
-            _worker = new Thread(() => Work(reading, epochs)) { IsBackground = true };
+                try
+                {
+                    step(reading);
+                }
+                catch (Exception e)
+                {
+                    Plugin.Log.Error($"analysis failed: {e}");
+                    Advice.Summary = "Analysis failed; see the log.";
+                }
+                finally
+                {
+                    _running = false;
+                    Advice.Progress = 0f;
+                    Advice.Publish();
+                }
+            })
+            { IsBackground = true };
             _worker.Start();
+            return true;
         }
 
-        private static void Work(OffsetState.Reading reading, List<OffsetJournal.Epoch> epochs)
+        private static void Read(OffsetState.Reading reading)
         {
-            try
+            var files = Discover();
+            if (files.Count == 0)
             {
-                // A control run, for attributing memory rather than guessing at it. Other
-                // mods load leaderboards and scan songs during the same window, so a heap
-                // delta measured only with ingestion running cannot say which of them grew.
-                // With this marker present the loop is skipped and the same window measured.
-                // Measured, not assumed: with this marker the read is skipped and the same
-                // window sampled, so growth from other mods loading can be told from growth
-                // caused here. It reported 662 MB against 688 MB -- reading 555 replays costs
-                // about 26 MB, where the process sits above 3 GB for reasons of its own.
-                var control = File.Exists(Path.Combine(Paths.DataDir, "no-ingest.on"));
-                if (control)
+                Advice.Summary = "No replays found.";
+                Plugin.Log.Info("no replays found; the live recorder is the only source here");
+                return;
+            }
+
+            // Built from every replay found, not from the ones this pass will open, so the
+            // sliders span the player's whole history. A capped list left its earlier half
+            // unreachable with nothing on screen explaining why.
+            Advice.Sessions = files
+                .Select(f => File.GetLastWriteTimeUtc(f).Date)
+                .GroupBy(d => d)
+                .OrderBy(g => g.Key)
+                .Select(g => new KeyValuePair<DateTime, int>(g.Key, g.Count()))
+                .ToList();
+            Advice.Publish();
+
+            var epochs = OffsetJournal.Read();
+            var found = new List<ReplayCuts.Extraction>();
+
+            // Counted by reason. "250 skipped" cannot distinguish a library full of One Saber
+            // runs from a filter discarding good data, and those want opposite responses.
+            var why = new Dictionary<string, int>();
+            void Drop(string reason) =>
+                why[reason] = why.TryGetValue(reason, out var n) ? n + 1 : 1;
+
+            var speeds = new List<float>();
+            var residuals = new List<float>();
+
+            // One replay's worth of buffers for the whole pass, rather than a fresh few
+            // megabytes per file. Measured at about 26 MB retained across 555 replays, against
+            // a process that sits above 3 GB for reasons entirely its own.
+            var scratch = new Bsor.Scratch();
+            var seen = 0;
+
+            foreach (var file in files)
+            {
+                if (found.Count >= TargetUsableRuns || seen >= MaxFilesToOpen)
                 {
-                    var idle = GC.GetTotalMemory(true);
-                    Thread.Sleep(90000);
-                    Plugin.Log.Info(
-                        $"CONTROL (no ingestion): managed heap {idle / 1048576} MB -> "
-                        + $"{GC.GetTotalMemory(true) / 1048576} MB over the same 90 s window");
-                    return;
+                    break;
+                }
+                if (++seen % 25 == 0)
+                {
+                    Advice.Summary = $"Reading replays... {found.Count} of {TargetUsableRuns}";
+                    Advice.Progress = (float)found.Count / TargetUsableRuns;
+                    Advice.Publish();
                 }
 
-                var files = Discover();
-                if (files.Count == 0)
+                Bsor.Replay replay;
+                try
                 {
-                    Plugin.Log.Info(
-                        "no replays found; the live recorder is the only source of cuts here");
-                    return;
+                    replay = Bsor.Parse(file, scratch);
+                }
+                catch
+                {
+                    // Roughly a tenth of a live install's replays do not parse; a partially
+                    // written one is unremarkable.
+                    Drop("unreadable");
+                    continue;
                 }
 
-                // Published before anything is parsed. Session dates are just file
-                // timestamps, and the menu needs a range to build its sliders from the moment
-                // it is opened -- parsing takes a minute, and a panel built in the meantime
-                // gets a zero-length slider and renders nothing at all.
-                // Built from every replay found, not from the ones this pass will open. The
-                // sliders have to span the player's whole history or the earlier part of it
-                // is unreachable, with nothing on screen saying why.
-                Advice.Sessions = files
-                    .Select(f => File.GetLastWriteTimeUtc(f).Date)
-                    .GroupBy(d => d)
-                    .OrderBy(g => g.Key)
-                    .Select(g => new KeyValuePair<DateTime, int>(g.Key, g.Count()))
-                    .ToList();
-                Advice.Summary = $"Reading {files.Count} replays...";
-                Advice.Publish();
-
-                var groups = new List<(OffsetJournal.Epoch Epoch, List<ReplayCuts.Extraction> Runs)>();
-                var used = 0;
-                var skipped = 0;
-                // Counted by reason. "250 skipped" says nothing about whether that is a
-                // library full of One Saber runs or a filter throwing away good data, and
-                // those want opposite responses.
-                var why = new Dictionary<string, int>();
-                void Drop(string reason)
+                if (replay.Info.Mode != "Standard")
                 {
-                    skipped++;
-                    why[reason] = why.TryGetValue(reason, out var n) ? n + 1 : 1;
+                    Drop($"not Standard ({replay.Info.Mode})");
+                    continue;
                 }
-                var unknownEpoch = 0;
-                var outsideRange = 0;
-                var everySession = new List<DateTime>();
-                var speeds = new List<float>();
-                var residuals = new List<float>();
-
-                // One replay's worth of buffers for the whole pass, rather than a fresh
-                // few megabytes per file for the garbage collector to sit on.
-                var scratch = new Bsor.Scratch();
-                // Managed heap, not working set. The process sits at gigabytes with a large
-                // song library loaded, and reading the total told me this ingestion was
-                // responsible for all of it -- which it was not. This measures only what this
-                // code allocates.
-                // Not forced in a normal run: GetTotalMemory(true) runs a full blocking
-                // collection, and two of those per ingestion is a real pause to buy a number
-                // nobody is reading. Forced only alongside the control, where the comparison
-                // needs both ends settled.
-                var measuring = File.Exists(Path.Combine(Paths.DataDir, "measure-heap.on"));
-                var heapBefore = GC.GetTotalMemory(measuring);
-                var seen = 0;
-                foreach (var file in files)
+                if (!replay.Info.Clean)
                 {
-                    if (used >= TargetUsableRuns || seen >= MaxFilesToOpen)
-                    {
-                        break;
-                    }
-                    // Reading four hundred replays takes about a minute, and a panel that
-                    // says nothing for a minute is indistinguishable from one that is broken.
-                    if (++seen % 25 == 0)
-                    {
-                        Advice.Summary = $"Reading replays... {used} of {TargetUsableRuns}";
-                        Advice.Publish();
-                    }
+                    Drop("speed or practice modifier");
+                    continue;
+                }
 
-                    Bsor.Replay replay;
-                    try
-                    {
-                        replay = Bsor.Parse(file, scratch);
-                    }
-                    catch
-                    {
-                        // Roughly a tenth of a live install's replays do not parse; a
-                        // partially written one is unremarkable.
-                        Drop("unreadable");
-                        continue;
-                    }
+                var cuts = ReplayCuts.Extract(replay, MinCutsPerHand);
+                if (cuts.Left.Cuts == null || cuts.Left.Cuts.Count == 0)
+                {
+                    Drop($"under {MinCutsPerHand} cuts a hand");
+                    continue;
+                }
 
-                    if (replay.Info.Mode != "Standard")
-                    {
-                        Drop($"not Standard ({replay.Info.Mode})");
-                        continue;
-                    }
-                    if (!replay.Info.Clean)
-                    {
-                        Drop("speed or practice modifier");
-                        continue;
-                    }
+                // The journal is fact and is resolved now. Anything it does not cover depends
+                // on the profile the player names, which is step two, so it waits for the fit.
+                var when = File.GetLastWriteTimeUtc(file);
+                cuts.Played = when;
+                cuts.FromJournal = OffsetJournal.TryAt(epochs, when, out var epoch);
+                cuts.Epoch = epoch;
+                found.Add(cuts);
+                speeds.Add(cuts.Left.NoteSpeed);
+                residuals.Add(cuts.Left.MedianResidual);
+            }
 
-                    // Cuts are grouped by the settings they were played under, and each group
-                    // is fitted against its own. The residual is the player's grip minus the
-                    // offset already applied, so pooling across settings fits a compromise
-                    // that suits neither -- but the *answer* is absolute either way, since
-                    // applying a group's correction to the settings that group was played on
-                    // lands on the same grip whichever group it came from.
-                    var when = File.GetLastWriteTimeUtc(file);
-                    var fromJournal = OffsetJournal.TryAt(epochs, when, out var epoch);
-                    if (!fromJournal)
-                    {
-                        unknownEpoch++;
-                        epoch = Assumed(reading);
-                    }
+            _read = found;
+            residuals.Sort();
 
-                    var cuts = ReplayCuts.Extract(replay, MinCutsPerHand);
-                    if (cuts.Left.Cuts == null || cuts.Left.Cuts.Count == 0)
-                    {
-                        Drop($"under {MinCutsPerHand} cuts a hand");
-                        continue;
-                    }
-                    cuts.Played = when;
-                    cuts.FromJournal = fromJournal;
-                    everySession.Add(when.Date);
+            Plugin.Log.Info(
+                $"replays: {found.Count} used, {seen - found.Count} skipped, "
+                + $"{seen} of {files.Count} opened ("
+                + string.Join(", ", why.OrderByDescending(k => k.Value)
+                                       .Select(k => $"{k.Value} {k.Key}")) + ")");
+            if (residuals.Count > 0)
+            {
+                Plugin.Log.Info(
+                    $"note-centre reconstruction: median residual "
+                    + $"{residuals[residuals.Count / 2] * 1000f:F1} mm, "
+                    + $"fitted note speed {speeds.Average():F1} m/s");
+            }
 
+            var biggest = why.Count == 0
+                ? ""
+                : why.OrderByDescending(k => k.Value).Select(k => $", {k.Value} {k.Key}").First();
+            Advice.Summary = $"{found.Count} runs read of {seen} replays{biggest}. "
+                             + "Set the range below, then fit.";
+            Advice.Publish();
+        }
+
+        private static void Fit(OffsetState.Reading reading)
+        {
+            var runs = _read;
+            if (runs.Count == 0)
+            {
+                Advice.Summary = "Nothing read yet. Read the replays first.";
+                return;
+            }
+
+            // Grouped by the settings each run was played on, and each group fitted against
+            // its own. The residual is the player's grip minus the offset already applied, so
+            // pooling across settings fits a compromise suiting neither -- but the answer is
+            // absolute either way, since applying a group's correction to the settings that
+            // group was played on lands on the same grip whichever group it came from.
+            var groups = new List<(OffsetJournal.Epoch Epoch, List<ReplayCuts.Extraction> Runs)>();
+            var assumed = Assumed(reading);
+            var outsideRange = 0;
+            var unknownEpoch = 0;
+
+            foreach (var run in runs)
+            {
+                var epoch = run.Epoch;
+                if (!run.FromJournal)
+                {
+                    unknownEpoch++;
                     // The range is the player's word about history the journal cannot vouch
-                    // for. Replays it does cover are recorded fact and are not up for a vote.
-                    if (!fromJournal && !Preferences.InRange(when))
+                    // for. Runs it does cover are recorded fact and are not up for a vote.
+                    if (!Preferences.InRange(run.Played))
                     {
                         outsideRange++;
-                        Drop("outside the chosen dates");
                         continue;
                     }
-                    Bucket(groups, epoch).Add(cuts);
-                    speeds.Add(cuts.Left.NoteSpeed);
-                    residuals.Add(cuts.Left.MedianResidual);
-                    used++;
+                    epoch = assumed;
                 }
-
-                // Published before the range is applied, so the sliders span the whole
-                // history and a narrowed range can always be widened again.
-                Advice.Sessions = everySession
-                    .GroupBy(d => d)
-                    .OrderBy(g => g.Key)
-                    .Select(g => new KeyValuePair<DateTime, int>(g.Key, g.Count()))
-                    .ToList();
-
-                var heapAfter = GC.GetTotalMemory(measuring);
-                Plugin.Log.Info(
-                    $"managed heap {heapBefore / 1048576} MB -> {heapAfter / 1048576} MB "
-                    + $"over {seen} replays"
-                    + (measuring ? " (both settled)" : ""));
-                Plugin.Log.Info(
-                    $"replays: {used} used, {skipped} skipped, {seen} of {files.Count} opened ("
-                    + string.Join(", ", why.OrderByDescending(k => k.Value)
-                                           .Select(k => $"{k.Value} {k.Key}")) + ")");
-                if (used < TargetUsableRuns && seen >= MaxFilesToOpen)
-                {
-                    Plugin.Log.Warn(
-                        $"stopped after opening {seen} files with only {used} usable runs; "
-                        + "the fit is working with less than it asked for");
-                }
-                Advice.Publish();
-                var biggest = why.Count == 0
-                    ? ""
-                    : why.OrderByDescending(k => k.Value).Select(k => $", {k.Value} {k.Key}").First();
-                Advice.Summary = $"{used} runs used, {seen} replays read{biggest}.";
-                if (unknownEpoch > 0)
-                {
-                    Plugin.Log.Warn(
-                        $"{unknownEpoch} replays predate the offset journal, so they are used " +
-                        "on the assumption the grip has not changed across them");
-                }
-                if (used == 0)
-                {
-                    return;
-                }
-
-                Advice.Left = "";
-                Advice.Right = "";
-                residuals.Sort();
-                Plugin.Log.Info(
-                    $"note-centre reconstruction: median residual " +
-                    $"{residuals[residuals.Count / 2] * 1000f:F1} mm, " +
-                    $"fitted note speed {speeds.Average():F1} m/s");
-
-                // The panel shows one answer, so it has to be the one being recommended.
-                // Writing every group's line in turn left whichever came last on screen --
-                // and the last is the smallest, which is exactly the group too thin to act
-                // on. The log carries them all; the panel carries the one that counts.
-                var advised = false;
-                foreach (var group in groups.OrderByDescending(g => g.Runs.Count))
-                {
-                    // Only the assumed group needs checking. Anything the journal covers is
-                    // recorded fact, and re-testing it would only add a chance to be wrong.
-                    if (group.Runs.Any(r => !r.FromJournal))
-                    {
-                        CheckTheAssumption(group.Runs);
-                    }
-                    var leftCuts = group.Runs.SelectMany(r => r.Left.Cuts).ToList();
-                    var rightCuts = group.Runs.SelectMany(r => r.Right.Cuts).ToList();
-                    var trusted = group.Runs.Count >= MinRunsToRecommend;
-                    Plugin.Log.Info(
-                        $"-- settings left {group.Epoch.LeftRotation} right " +
-                        $"{group.Epoch.RightRotation}: {group.Runs.Count} runs" +
-                        (trusted ? "" : $" (under {MinRunsToRecommend}: shown, not recommended)"));
-                    var show = trusted && !advised;
-                    Report("   left", leftCuts, group.Epoch.LeftRotation, true, group.Epoch,
-                           trusted, show);
-                    Report("   right", rightCuts, group.Epoch.RightRotation, false, group.Epoch,
-                           trusted, show);
-                    advised |= show;
-                    Advice.Publish();
-                }
-
-                if (!advised)
-                {
-                    Advice.Left =
-                        $"No group has the {MinRunsToRecommend} runs needed to advise from.";
-                    Advice.Right = "Play more, or widen the date range.";
-                    Advice.Publish();
-                }
+                Bucket(groups, epoch).Add(run);
             }
-            catch (Exception e)
+
+            Plugin.Log.Info(
+                $"fitting {runs.Count - outsideRange} runs in {groups.Count} settings group(s)"
+                + (outsideRange > 0 ? $"; {outsideRange} outside the chosen dates" : ""));
+            if (unknownEpoch > 0)
             {
-                Plugin.Log.Error($"replay ingestion failed: {e}");
+                Plugin.Log.Warn(
+                    $"{unknownEpoch} runs predate the offset journal, so they are used on the "
+                    + "settings named in the panel rather than on a record");
             }
+
+            Advice.Left = "";
+            Advice.Right = "";
+            var advised = false;
+            var index = 0;
+
+            foreach (var group in groups.OrderByDescending(g => g.Runs.Count))
+            {
+                if (group.Runs.Any(r => !r.FromJournal))
+                {
+                    CheckTheAssumption(group.Runs);
+                }
+
+                var leftCuts = group.Runs.SelectMany(r => r.Left.Cuts).ToList();
+                var rightCuts = group.Runs.SelectMany(r => r.Right.Cuts).ToList();
+                var trusted = group.Runs.Count >= MinRunsToRecommend;
+                Plugin.Log.Info(
+                    $"-- settings left {group.Epoch.LeftRotation} right "
+                    + $"{group.Epoch.RightRotation}: {group.Runs.Count} runs"
+                    + (trusted ? "" : $" (under {MinRunsToRecommend}: shown, not recommended)"));
+
+                var show = trusted && !advised;
+                var span = 1f / Mathf.Max(groups.Count, 1);
+                Report("   left", leftCuts, group.Epoch.LeftRotation, true, group.Epoch,
+                       trusted, show, index * span, span * 0.5f);
+                Report("   right", rightCuts, group.Epoch.RightRotation, false, group.Epoch,
+                       trusted, show, index * span + span * 0.5f, span * 0.5f);
+                advised |= show;
+                index++;
+                Advice.Publish();
+            }
+
+            if (!advised)
+            {
+                Advice.Left = $"No group has the {MinRunsToRecommend} runs needed to advise.";
+                Advice.Right = "Widen the date range, or play more.";
+            }
+            Advice.Summary = $"Fitted {runs.Count - outsideRange} runs.";
+            Advice.Publish();
         }
 
         /// <summary>
@@ -363,37 +347,26 @@ namespace ControllerAutoAdjust
             var verdict = ChangeDetector.Scan(sessions);
             if (verdict.Sessions < 6)
             {
-                Plugin.Log.Info(
-                    $"only {verdict.Sessions} sessions predate the journal: too few to check " +
-                    "whether the settings held steady across them");
+                Advice.Evidence = "";
                 return;
             }
             Advice.Evidence = verdict.Split
-                ? $"These replays do not look like one grip: the residual shifts "
+                ? $"These do not look like one grip: the residual shifts "
                   + $"{verdict.GapDegrees:F1} deg around {verdict.At:yyyy-MM-dd}."
-                : $"{verdict.Sessions} earlier sessions look consistent "
+                : $"{verdict.Sessions} sessions look consistent "
                   + $"(largest shift {verdict.GapDegrees:F1} deg).";
             if (verdict.Split)
             {
                 Plugin.Log.Warn(
-                    $"these replays do NOT look like one set of settings: the residual shifts " +
-                    $"{verdict.GapDegrees:F1} deg around {verdict.At:yyyy-MM-dd} " +
-                    $"(statistic {verdict.Statistic:F1}). Pooling across that fits a compromise " +
-                    "suiting neither side.");
-            }
-            else if (!Preferences.RangeProfileAnswered)
-            {
-                Plugin.Log.Info(
-                    $"{verdict.Sessions} sessions predate the journal and look consistent " +
-                    $"(largest shift {verdict.GapDegrees:F1} deg, statistic {verdict.Statistic:F1}), " +
-                    "but nobody has said which profile they were played on");
+                    $"these runs do NOT look like one set of settings: the residual shifts "
+                    + $"{verdict.GapDegrees:F1} deg around {verdict.At:yyyy-MM-dd} "
+                    + $"(statistic {verdict.Statistic:F1})");
             }
             else
             {
                 Plugin.Log.Info(
-                    $"{verdict.Sessions} sessions predate the journal; the profile you named " +
-                    $"is consistent with them (largest shift {verdict.GapDegrees:F1} deg, " +
-                    $"statistic {verdict.Statistic:F1})");
+                    $"{verdict.Sessions} sessions look consistent (largest shift "
+                    + $"{verdict.GapDegrees:F1} deg, statistic {verdict.Statistic:F1})");
             }
         }
 
@@ -403,12 +376,8 @@ namespace ControllerAutoAdjust
         /// nudged one way and back leaves three journal entries describing one grip, and a
         /// change confined to Z moves the triple without moving anything at all -- composed
         /// after the grip's large X tilt it is mostly roll about the blade, and roll cannot
-        /// move a cut plane. Both would fragment a history into groups too small to fit,
-        /// which reads as "not enough data" rather than as a grouping mistake.
-        ///
-        /// Comparing what the settings *do* handles every version of this with one rule, and
-        /// correctly keeps apart epochs that differ only in the legacy offset -- the same
-        /// typed numbers mean different things with and without a controller detected.
+        /// move a cut plane. Both would fragment a history into groups too small to fit, which
+        /// reads as "not enough data" rather than as a grouping mistake.
         /// </remarks>
         private const float SamePositionMetres = 0.001f;
 
@@ -434,7 +403,6 @@ namespace ControllerAutoAdjust
             return true;
         }
 
-        /// <summary>Cuts from one settings epoch, kept together.</summary>
         private static List<ReplayCuts.Extraction> Bucket(
             List<(OffsetJournal.Epoch Epoch, List<ReplayCuts.Extraction> Runs)> groups,
             OffsetJournal.Epoch epoch)
@@ -452,16 +420,13 @@ namespace ControllerAutoAdjust
         }
 
         /// <summary>
-        /// The settings a replay from before the journal was played on.
+        /// The settings a run from before the journal was played on.
         /// </summary>
         /// <remarks>
-        /// If the player has named the profile, its stored numbers are used -- real values
-        /// rather than a guess, and the game still holds them. Failing that, the settings in
-        /// force now, which is a guess and is reported as one.
-        ///
-        /// Naming a profile is evidence, not proof: profiles are editable, so this is what
-        /// the profile holds today and only matches history if nobody has changed it since.
-        /// The change detector gets to disagree with it either way.
+        /// The grip copied from whichever profile the player named, if they named one -- real
+        /// values rather than a guess, taken at the moment of choosing so a later edit to that
+        /// profile cannot change what they meant. Failing that, the settings in force now,
+        /// which is a guess and is reported as one.
         /// </remarks>
         private static OffsetJournal.Epoch Assumed(OffsetState.Reading r)
         {
@@ -492,32 +457,46 @@ namespace ControllerAutoAdjust
 
         private static void Report(
             string name, List<CutSample> cuts, Vector3 current, bool left,
-            OffsetJournal.Epoch epoch, bool trusted = true, bool show = true)
+            OffsetJournal.Epoch epoch, bool trusted, bool show, float from, float span)
         {
             if (cuts.Count == 0)
             {
                 Plugin.Log.Info($"{name}: no cuts");
                 return;
             }
+
+            var hand = name.Trim();
+            var clock = System.Diagnostics.Stopwatch.StartNew();
             var found = OffsetSearch.Search(
-                cuts, current, left, epoch.LegacyRotation, epoch.AlternativeHandling);
+                cuts, current, left, epoch.LegacyRotation, epoch.AlternativeHandling,
+                onProgress: done =>
+                {
+                    Advice.Summary = $"Fitting the {hand} hand... {done:P0}";
+                    Advice.Progress = from + span * done;
+                    Advice.Publish();
+                });
+            clock.Stop();
 
             var meanDistance = cuts.Average(c => Mathf.Abs(c.Signed));
             var after = cuts.Average(c => OffsetSearch.DistanceUnder(c, found.Turn));
             Plugin.Log.Info(
-                $"{name}: {cuts.Count:N0} cuts | now {current} -> suggest {found.Setting} " +
-                $"| turn {found.Turn.x * Mathf.Rad2Deg:F2},{found.Turn.y * Mathf.Rad2Deg:F2} deg " +
-                $"| mean cut {meanDistance * 100f:F2} -> {after * 100f:F2} cm " +
-                $"| worth {found.GainFraction:P3} of score" +
-                (trusted ? "" : " [too few runs to act on]"));
+                $"{name}: {cuts.Count:N0} cuts | now {current} -> suggest {found.Setting} "
+                + $"| turn {found.Turn.x * Mathf.Rad2Deg:F2},{found.Turn.y * Mathf.Rad2Deg:F2} deg "
+                + $"| mean cut {meanDistance * 100f:F2} -> {after * 100f:F2} cm "
+                + $"| worth {found.GainFraction:P3} of score | {clock.ElapsedMilliseconds} ms, "
+                + $"{found.DistinctTurns} distinct turns of {found.Candidates} settings"
+                + (trusted ? "" : " [too few runs to act on]"));
 
+            // The panel shows one answer, so it has to be the one being recommended. Writing
+            // every group's line in turn left whichever came last on screen, and groups run
+            // largest first, making the last the smallest -- exactly the one too thin to act on.
             if (!show)
             {
                 return;
             }
             var line = trusted
-                ? $"{name.Trim()}: {current} -> {found.Setting}, worth {found.GainFraction:P2}"
-                : $"{name.Trim()}: too few runs to advise ({cuts.Count:N0} cuts)";
+                ? $"{hand}: {current} -> {found.Setting}, worth {found.GainFraction:P2}"
+                : $"{hand}: too few runs to advise ({cuts.Count:N0} cuts)";
             if (left)
             {
                 Advice.Left = line;
@@ -531,8 +510,8 @@ namespace ControllerAutoAdjust
         /// <summary>Replay folders: this install's, plus any the player has listed.</summary>
         /// <remarks>
         /// The extra list exists because a BSManager setup keeps a separate tree per game
-        /// version, and a player's history is spread across all of them while the mod can
-        /// only see the one it is installed in.
+        /// version, and a player's history is spread across all of them while the mod can only
+        /// see the one it is installed in.
         /// </remarks>
         private static List<string> Discover()
         {
@@ -569,8 +548,8 @@ namespace ControllerAutoAdjust
                     Plugin.Log.Warn($"could not list {folder}: {e.Message}");
                 }
             }
-            // Every replay found, newest first. The caller decides how far down to read;
-            // the full list is what the session timeline is built from.
+            // Newest first. The caller decides how far down to read; the full list is what the
+            // session timeline is built from.
             return files.OrderByDescending(File.GetLastWriteTimeUtc).ToList();
         }
     }

@@ -5,6 +5,7 @@ using BeatSaberMarkupLanguage.Attributes;
 using BeatSaber.GameSettings;
 using BeatSaberMarkupLanguage.Settings;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace ControllerAutoAdjust
 {
@@ -44,6 +45,7 @@ namespace ControllerAutoAdjust
             foreach (var name in new[]
                      {
                          nameof(Status), nameof(Advisory), nameof(StartPercent), nameof(EndPercent),
+                         nameof(ReadButton), nameof(FitButton),
                          nameof(ProfileChoices), nameof(Profile),
                      })
             {
@@ -94,6 +96,9 @@ namespace ControllerAutoAdjust
                     _shown = Advice.Version;
                     _registered.Refresh();
                 }
+                // Every frame, not only on a version bump: the fill should move smoothly
+                // rather than in the steps the text updates on.
+                _registered.DrawProgress();
             }
         }
 
@@ -319,6 +324,114 @@ namespace ControllerAutoAdjust
             return sessions[Mathf.Clamp(index, 0, sessions.Count - 1)].Key;
         }
 
+        /// <summary>
+        /// Reading and fitting are separate, and asked for rather than automatic.
+        /// </summary>
+        /// <remarks>
+        /// Reading several hundred replays is a minute and a half; fitting both hands is
+        /// twenty seconds; and between them sits a choice only the player can make. Joined
+        /// together, nudging the date range by a week cost the whole read again for cuts that
+        /// had not changed. Apart, the read is kept in memory and the fit re-runs against it.
+        ///
+        /// Neither happens on launch. Most launches are to play, and the panel is where the
+        /// answer lives anyway.
+        /// </remarks>
+        [UIAction("read")]
+        public void ReadReplays()
+        {
+            if (!Recommender.BeginRead())
+            {
+                Plugin.Log.Info("already working, or the controllers are not up yet");
+            }
+            Advice.Publish();
+        }
+
+        [UIAction("fit")]
+        public void FitHands()
+        {
+            if (!Recommender.BeginFit())
+            {
+                Plugin.Log.Info("already working, or the controllers are not up yet");
+            }
+            Advice.Publish();
+        }
+
+        [UIValue("read-button")]
+        public string ReadButton => Recommender.Running
+            ? "Working..."
+            : Recommender.HasRead
+                ? $"1. Re-read replays ({Recommender.RunsRead} in memory)"
+                : "1. Read replays";
+
+        [UIValue("fit-button")]
+        public string FitButton => Recommender.Running
+            ? "Working..."
+            : Recommender.HasRead
+                ? "3. Fit both hands"
+                : "3. Fit both hands (read first)";
+
+        /// <summary>
+        /// A real bar, driven straight from the component rather than through markup.
+        /// </summary>
+        /// <remarks>
+        /// BSML has no progress-bar tag -- only an indeterminate spinner -- and its numeric
+        /// attributes do not take bound values, which is what defeated the slider bounds
+        /// earlier. An image set to Filled has exactly the behaviour wanted, so the component
+        /// is captured and its fill written each frame instead.
+        /// </remarks>
+        [UIComponent("progress-fill")]
+        private Image _fill;
+
+        [UIObject("progress-row")]
+        private GameObject _progressRow;
+
+        /// <summary>
+        /// The buttons, so they can be greyed rather than merely labelled.
+        /// </summary>
+        /// <remarks>
+        /// Saying "read first" on a button that still responds is a label pretending to be a
+        /// rule. Driven from the component for the same reason as the fill: BSML fixes its
+        /// attributes at parse time, and this state changes while the panel is open.
+        /// </remarks>
+        [UIComponent("read-button")]
+        private Button _readButton;
+
+        [UIComponent("fit-button")]
+        private Button _fitButton;
+
+        internal void DrawProgress()
+        {
+            if (_progressRow != null)
+            {
+                _progressRow.SetActive(Recommender.Running);
+            }
+            if (_readButton != null)
+            {
+                _readButton.interactable = !Recommender.Running;
+            }
+            if (_fitButton != null)
+            {
+                // Nothing to fit until something has been read, and nothing may start while
+                // a step is already running.
+                _fitButton.interactable = Recommender.HasRead && !Recommender.Running;
+            }
+            if (_fill == null)
+            {
+                return;
+            }
+            if (_fill.type != Image.Type.Filled)
+            {
+                _fill.type = Image.Type.Filled;
+                _fill.fillMethod = Image.FillMethod.Horizontal;
+                _fill.fillOrigin = (int)Image.OriginHorizontal.Left;
+            }
+            _fill.fillAmount = Mathf.Clamp01(Advice.Progress);
+        }
+
+        [UIValue("analyse-button")]
+        public string AnalyseButton =>
+            Recommender.Running ? "Working..." : "Analyse my replays";
+
         [UIValue("status")]
         public string Status => Advice.Summary
             + (Timeline.Length > 0 ? "\n" + Timeline : "")
@@ -396,6 +509,9 @@ namespace ControllerAutoAdjust
 
         /// <summary>Bumped whenever any of the above changes, so the menu can notice.</summary>
         internal static volatile int Version;
+
+        /// <summary>How far through the current piece of work, from 0 to 1.</summary>
+        internal static volatile float Progress;
 
         internal static void Publish() => Version++;
     }

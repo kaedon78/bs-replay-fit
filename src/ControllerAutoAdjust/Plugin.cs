@@ -30,7 +30,6 @@ namespace ControllerAutoAdjust
             _host.AddComponent<SwingHarness>();
             _host.AddComponent<SettingsWatcher>();
             _host.AddComponent<SettingsMenu.Installer>();
-            _host.AddComponent<Recommender>();
             SearchSelfTest.Run();
             Log.Info("OnStart: probe and recorder attached");
         }

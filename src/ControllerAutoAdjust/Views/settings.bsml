@@ -1,24 +1,41 @@
 <settings-container xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'
                     xsi:noNamespaceSchemaLocation='https://raw.githubusercontent.com/monkeymanboy/BSML-Docs/gh-pages/BSMLSchema.xsd'>
 
-  <!-- Wrapped with an explicit height. A bare text has no preferred height, so the
+  <!-- Wrapped with an explicit height. A bare text reports no preferred height, so the
        container hands it everything left over and the controls end up below the fold. -->
-  <horizontal pref-height='11' pref-width='90'>
+  <horizontal pref-height='9' pref-width='90'>
     <text text='~status' align='Center' font-size='3.2'/>
   </horizontal>
 
-  <slider-setting text='Use replays from' value='start-percent'
+  <!-- Hidden unless something is running; the fill is driven from code, since BSML has no
+       progress-bar tag and will not bind a numeric attribute. -->
+  <horizontal id='progress-row' pref-height='4' pref-width='80' bg='panel-top'>
+    <image id='progress-fill' src='#RoundRect10' pref-height='3' pref-width='78'
+           image-color='#4af'/>
+  </horizontal>
+
+  <horizontal pref-height='8' pref-width='90'>
+    <button id='read-button' text='~read-button' on-click='read'
+            hover-hint='Reads your replay files. Slow, and only needed once per session.'/>
+  </horizontal>
+
+  <slider-setting text='2. Use replays from' value='start-percent'
                   min='0' max='100' increment='2' integer-only='true'
                   formatter='format-session'
-                  hover-hint='Earliest session to train on. Set this to when you last changed your grip.'/>
+                  hover-hint='Earliest session to fit on. Set this to when you last changed your grip.'/>
 
-  <slider-setting text='Use replays until' value='end-percent'
+  <slider-setting text='2. Use replays until' value='end-percent'
                   min='0' max='100' increment='2' integer-only='true'
                   formatter='format-session'
-                  hover-hint='Latest session to train on.'/>
+                  hover-hint='Latest session to fit on.'/>
 
-  <list-setting text='Those replays were played on' value='profile' choices='profile-choices'
+  <list-setting text='2. Those replays were played on' value='profile' choices='profile-choices'
                 hover-hint='Which controller profile was in use for that range. Replays do not record it.'/>
+
+  <horizontal pref-height='8' pref-width='90'>
+    <button id='fit-button' text='~fit-button' on-click='fit'
+            hover-hint='Fits both hands to the range above. Fast, so change the range and refit freely.'/>
+  </horizontal>
 
   <horizontal pref-height='9' pref-width='90'>
     <text text='~advisory' align='Center' font-size='3.2'/>

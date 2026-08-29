@@ -41,6 +41,9 @@ namespace ControllerAutoAdjust
 
             /// <summary>False when the epoch was assumed rather than recorded.</summary>
             public bool FromJournal;
+
+            /// <summary>The journalled settings, meaningful only when FromJournal.</summary>
+            public OffsetJournal.Epoch Epoch;
             public string Song = "";
             public string Difficulty = "";
             public int Score;
