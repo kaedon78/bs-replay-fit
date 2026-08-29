@@ -685,6 +685,7 @@ namespace ControllerAutoAdjust
         /// </remarks>
         private int _listedFor = -1;
         private string _listed = "";
+        private int _assignedRuns;
 
         [UIValue("assignments")]
         public string AssignmentList
@@ -703,6 +704,11 @@ namespace ControllerAutoAdjust
         private string BuildAssignmentList()
         {
             var list = Preferences.Assignments;
+            _assignedRuns = 0;
+            foreach (var a in list)
+            {
+                _assignedRuns += Recommender.RunsCoveredBy(a);
+            }
             if (!Recommender.HasRead)
             {
                 return "";
@@ -728,6 +734,22 @@ namespace ControllerAutoAdjust
             return string.Join("\n", lines);
         }
 
+        /// <summary>
+        /// Whether a fit would have any runs to fit.
+        /// </summary>
+        /// <remarks>
+        /// A run counts if the journal recorded the settings behind it, or if the player has
+        /// assigned a range that covers it. With neither, every run is dropped and the fit
+        /// finishes instantly having done nothing, reporting no group large enough to advise
+        /// -- which reads as "not enough history" rather than as "you have not said which
+        /// settings this history was played on".
+        ///
+        /// Reads the memo, so it costs nothing per frame; touching AssignmentList first is
+        /// what keeps it current, and DrawProgress does that before it reaches the button.
+        /// </remarks>
+        private bool Fittable =>
+            Recommender.RunsRead - Advice.UnknownRuns > 0 || _assignedRuns > 0;
+
         [UIValue("read-button")]
         public string ReadButton => Recommender.Running
             ? "Working..."
@@ -738,9 +760,11 @@ namespace ControllerAutoAdjust
         [UIValue("fit-button")]
         public string FitButton => Recommender.Running
             ? "Working..."
-            : Recommender.HasRead
-                ? "3. Fit both hands"
-                : "3. Fit both hands (read first)";
+            : !Recommender.HasRead
+                ? "3. Fit both hands (read first)"
+                : Fittable
+                    ? "3. Fit both hands"
+                    : "3. Fit both hands (assign a range first)";
 
         /// <summary>
         /// A real bar, driven straight from the component rather than through markup.
@@ -1012,7 +1036,8 @@ namespace ControllerAutoAdjust
             {
                 // Nothing to fit until something has been read, and nothing may start while
                 // a step is already running.
-                _fitButton.interactable = Recommender.HasRead && !Recommender.Running;
+                _fitButton.interactable =
+                    Recommender.HasRead && !Recommender.Running && Fittable;
             }
 
             // Greyed rather than merely explained. These govern runs with no recorded
