@@ -400,14 +400,27 @@ namespace ControllerAutoAdjust
             var sessions = Advice.Sessions;
             if (sessions.Count == 0)
             {
+                Advice.Note = "Read the replays first.";
+                Advice.Publish();
                 return;
             }
             var from = Preferences.RangeStart ?? sessions[0].Start;
             var to = Preferences.RangeEnd ?? sessions[sessions.Count - 1].End;
+
+            // "As they are now" is a real answer, not a missing one. It stores no grip --
+            // there is no profile to copy from -- so the live settings stand in for it.
+            // Refusing it silently made the button look broken for the default choice.
             if (!Preferences.TryGetRangeGrip(out var left, out var right, out var alternative))
             {
-                Plugin.Log.Info("pick which profile that range was played on before assigning");
-                return;
+                if (!OffsetState.TryRead(out var live))
+                {
+                    Advice.Note = "Could not read the current settings.";
+                    Advice.Publish();
+                    return;
+                }
+                left = live.Left.TypedRotation;
+                right = live.Right.TypedRotation;
+                alternative = live.AlternativeHandling;
             }
             Preferences.AddAssignment(new Preferences.Assignment
             {
@@ -417,6 +430,7 @@ namespace ControllerAutoAdjust
                 RightRotation = right,
                 AlternativeHandling = alternative,
             });
+            Advice.Note = $"Assigned {from:d MMM HH:mm} to {to:d MMM HH:mm}.";
             Advice.Publish();
         }
 
@@ -425,6 +439,7 @@ namespace ControllerAutoAdjust
         {
             Preferences.ClearAssignments();
             Plugin.Log.Info("assignments cleared");
+            Advice.Note = "Assignments cleared.";
             Advice.Publish();
         }
 
@@ -433,25 +448,31 @@ namespace ControllerAutoAdjust
         {
             get
             {
+                var note = Advice.Note.Length > 0 ? Advice.Note + "\n" : "";
                 var list = Preferences.Assignments;
                 if (!Recommender.HasRead)
                 {
-                    return "";
+                    return note;
                 }
                 if (list.Count == 0)
                 {
-                    return Advice.UnknownRuns == 0
+                    return note + (Advice.UnknownRuns == 0
                         ? ""
-                        : $"No ranges assigned yet, so none of those {Advice.UnknownRuns} runs "
-                          + "will be used.";
+                        : $"No ranges assigned, so none of those {Advice.UnknownRuns} runs "
+                          + "will be used.");
                 }
+
+                // Each line carries how many runs it actually covers. A range that reads
+                // plausibly and holds nothing is the failure worth catching here: the dates
+                // look right, and the fit quietly has less than it appears to.
                 var lines = new List<string>();
                 foreach (var a in list)
                 {
-                    lines.Add($"{a.From:d MMM HH:mm} - {a.To:d MMM HH:mm}: "
-                              + $"L {Short(a.LeftRotation)}  R {Short(a.RightRotation)}");
+                    lines.Add($"{a.From:d MMM HH:mm} - {a.To:d MMM HH:mm}  "
+                              + $"L {Short(a.LeftRotation)} R {Short(a.RightRotation)}  "
+                              + $"[{Recommender.RunsCoveredBy(a)} runs]");
                 }
-                return string.Join("\n", lines);
+                return note + string.Join("\n", lines);
             }
         }
 
@@ -679,6 +700,9 @@ namespace ControllerAutoAdjust
     internal static class Advice
     {
         internal static volatile string Summary = "No replays read yet.";
+
+        /// <summary>The last thing a button did, so pressing one is visibly not a no-op.</summary>
+        internal static volatile string Note = "";
         internal static volatile string Evidence = "";
         internal static volatile string Left = "";
         internal static volatile string Right = "";

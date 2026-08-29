@@ -23,17 +23,21 @@
     <text text='~scope' align='Center' font-size='2.9'/>
   </horizontal>
 
+  <!-- apply-on-change, on all three, because these are not preferences: the Assign button
+       below reads them. BSML writes a setting back to its host on the screen's OK event
+       unless told otherwise, so without this the button read the range and profile from
+       before the player set them -- and with nothing ever written, it looked inert. -->
   <slider-setting id='from-slider' text='2. Earlier replays: from' value='start-percent'
                   min='0' max='100' increment='2' integer-only='true'
-                  formatter='format-session'
+                  formatter='format-session' apply-on-change='true'
                   hover-hint='Applies only to runs from before this mod was installed. Runs it has a record for are unaffected.'/>
 
   <slider-setting id='until-slider' text='2. Earlier replays: until' value='end-percent'
                   min='0' max='100' increment='2' integer-only='true'
-                  formatter='format-session'
+                  formatter='format-session' apply-on-change='true'
                   hover-hint='Applies only to runs from before this mod was installed.'/>
 
-  <list-setting id='profile-list' text='2. Earlier replays were played on' value='profile' choices='profile-choices'
+  <list-setting id='profile-list' text='2. Earlier replays were played on' value='profile' choices='profile-choices' apply-on-change='true'
                 hover-hint='Which controller profile was in use for that range. Replays do not record it.'/>
 
   <horizontal pref-height='7' pref-width='90' spacing='2'>
@@ -43,7 +47,7 @@
             hover-hint='Forget every assigned range.'/>
   </horizontal>
 
-  <horizontal pref-height='8' pref-width='90'>
+  <horizontal pref-height='12' pref-width='90'>
     <text text='~assignments' align='Center' font-size='2.9'/>
   </horizontal>
 

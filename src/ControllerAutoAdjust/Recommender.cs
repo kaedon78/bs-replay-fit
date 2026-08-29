@@ -75,6 +75,20 @@ namespace ControllerAutoAdjust
 
         internal static bool HasRead => _read.Count > 0;
 
+        /// <summary>How many runs an assignment actually covers, for showing next to it.</summary>
+        internal static int RunsCoveredBy(Preferences.Assignment a)
+        {
+            var count = 0;
+            foreach (var run in _read)
+            {
+                if (!run.FromJournal && a.Covers(run.Played))
+                {
+                    count++;
+                }
+            }
+            return count;
+        }
+
         /// <summary>Step one: read the replays. Slow, and only needed once.</summary>
         internal static bool BeginRead() => Start(reading => Read(reading));
 
