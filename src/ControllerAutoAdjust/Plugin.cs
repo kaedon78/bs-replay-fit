@@ -27,6 +27,7 @@ namespace ControllerAutoAdjust
             Object.DontDestroyOnLoad(_host);
             _host.AddComponent<OffsetProbe>();
             _host.AddComponent<CutRecorder>();
+            _host.AddComponent<SwingHarness>();
             Log.Info("OnStart: probe and recorder attached");
         }
 

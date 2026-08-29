@@ -31,18 +31,35 @@ namespace ControllerAutoAdjust
     {
         private const float LookForControllerEvery = 1f;
 
+        // Cuts are also flushed on this interval, not only when the song ends. A song
+        // is minutes of accumulation and a crash would take all of it, which is the one
+        // failure that costs data rather than time.
+        private const float FlushEvery = 15f;
+        private const int FlushAfterCuts = 200;
+
         private ScoreController _controller;
         private Saber _left;
         private Saber _right;
         private float _nextLook;
+        private float _nextFlush;
 
         /// <summary>Geometry captured at the cut, waiting for the multiplier that only
         /// arrives once the follow-through has been scored.</summary>
         private readonly Dictionary<ScoringElement, Pending> _inFlight =
             new Dictionary<ScoringElement, Pending>();
 
+        // File.AppendAllText(Encoding.UTF8) writes a byte-order mark, and a BOM ahead
+        // of the first line makes that line fail to parse as JSON while every later
+        // line is fine -- which reads as one corrupt record, not an encoding choice.
+        private static readonly UTF8Encoding NoBom = new UTF8Encoding(false);
+
         private readonly List<string> _lines = new List<string>();
         private string _sessionFile;
+
+        // Told apart deliberately: no cuts at all and plenty of cuts that all scored
+        // badly look identical in the output file, and have opposite fixes.
+        private int _scored;
+        private int _good;
 
         private struct Pending
         {
@@ -53,6 +70,11 @@ namespace ControllerAutoAdjust
 
         private void Update()
         {
+            if (Time.unscaledTime >= _nextFlush)
+            {
+                _nextFlush = Time.unscaledTime + FlushEvery;
+                Flush();
+            }
             if (Time.unscaledTime < _nextLook)
             {
                 return;
@@ -110,14 +132,21 @@ namespace ControllerAutoAdjust
             }
             _inFlight.Clear();
             Flush();
+            if (_scored > 0)
+            {
+                Plugin.Log.Info($"scored notes {_scored}, of which good cuts {_good}");
+                _scored = _good = 0;
+            }
         }
 
         private void OnCut(ScoringElement element)
         {
+            _scored++;
             if (!(element is GoodCutScoringElement good))
             {
                 return;
             }
+            _good++;
             try
             {
                 var cut = good.cutScoreBuffer.noteCutInfo;
@@ -168,20 +197,36 @@ namespace ControllerAutoAdjust
             }
             _inFlight.Remove(element);
 
-            var line = string.Format(
-                CultureInfo.InvariantCulture,
-                "{{\"t\":{0:F4},\"hand\":{1},\"col\":{2},\"row\":{3},\"dir\":{4},\"st\":{5}," +
-                "\"signed\":{6:F6},\"mx\":{7:F6},\"my\":{8:F6},\"lever\":{9:F5}," +
-                "\"mult\":{10},\"dist\":{11:F6}}}",
-                p.Time, p.Hand, p.Column, p.Row, p.Direction, p.ScoringType,
-                p.Signed, p.AcrossX, p.AcrossY, p.Lever, element.multiplier, p.ReportedDistance);
+            // Built explicitly rather than with a format string. `{11:F6}}}` looks like a
+            // value followed by two closing braces and is not: .NET reads the first `}}` as
+            // an escaped brace *inside* the format specifier, making it `F6}`, a custom
+            // format whose characters render as themselves. The field came out as the
+            // literal text "F6" with no exception raised.
+            var line = new StringBuilder(220)
+                .Append("{\"t\":").Append(Num(p.Time, "F4"))
+                .Append(",\"hand\":").Append(p.Hand)
+                .Append(",\"col\":").Append(p.Column)
+                .Append(",\"row\":").Append(p.Row)
+                .Append(",\"dir\":").Append(p.Direction)
+                .Append(",\"st\":").Append(p.ScoringType)
+                .Append(",\"signed\":").Append(Num(p.Signed, "F6"))
+                .Append(",\"mx\":").Append(Num(p.AcrossX, "F6"))
+                .Append(",\"my\":").Append(Num(p.AcrossY, "F6"))
+                .Append(",\"lever\":").Append(Num(p.Lever, "F5"))
+                .Append(",\"mult\":").Append(element.multiplier)
+                .Append(",\"dist\":").Append(Num(p.ReportedDistance, "F6"))
+                .Append('}')
+                .ToString();
             _lines.Add(line);
 
-            if (_lines.Count >= 200)
+            if (_lines.Count >= FlushAfterCuts)
             {
                 Flush();
             }
         }
+
+        private static string Num(float v, string format) =>
+            v.ToString(format, CultureInfo.InvariantCulture);
 
         internal void Flush()
         {
@@ -193,14 +238,14 @@ namespace ControllerAutoAdjust
             {
                 if (_sessionFile == null)
                 {
-                    var dir = Path.GetFullPath(Path.Combine(
-                        Application.dataPath, "..", "UserData", "ControllerAutoAdjust"));
-                    Directory.CreateDirectory(dir);
+                    var tag = SwingHarness.Enabled() ? "synthetic" : "cuts";
                     _sessionFile = Path.Combine(
-                        dir, $"cuts-{DateTime.Now:yyyyMMdd-HHmmss}.jsonl");
+                        Paths.DataDir, $"{tag}-{DateTime.Now:yyyyMMdd-HHmmss}.jsonl");
                 }
                 File.AppendAllText(_sessionFile, string.Join("\n", _lines) + "\n", Encoding.UTF8);
-                Plugin.Log.Info($"wrote {_lines.Count} cuts to {Path.GetFileName(_sessionFile)}");
+                Plugin.Log.Info(
+                    $"wrote {_lines.Count} cuts to {Path.GetFileName(_sessionFile)} "
+                    + $"({_good} good of {_scored} scored so far)");
                 _lines.Clear();
             }
             catch (Exception e)
