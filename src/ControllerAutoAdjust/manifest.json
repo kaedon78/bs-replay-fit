@@ -3,7 +3,7 @@
   "id": "ControllerAutoAdjust",
   "name": "ControllerAutoAdjust",
   "author": "Kaedon",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Measures where your sabers actually cut and suggests a controller offset that lands them closer to centre.",
   "gameVersion": "__GAMEVERSION__",
   "dependsOn": {

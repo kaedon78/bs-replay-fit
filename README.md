@@ -15,16 +15,19 @@ yourself.
 
 **A small, real improvement, or an honest "nothing to gain".**
 
-On the player it was developed against, the best available offset was worth about **+0.3%
-accuracy**. That is small *because that player's grip was already close*. Someone genuinely
-misaligned has more to gain. The mod is built to say plainly when there is nothing worth
-changing rather than inventing a reason to adjust.
+On the player it was developed against, measured over 300 runs, the best available offset was
+worth about **+0.24% accuracy**. That is small *because that player's grip was already close*.
+Someone genuinely misaligned has more to gain. The mod is built to say plainly when there is
+nothing worth changing rather than inventing a reason to adjust.
 
 Two things it will not do:
 
 - **It will not change how you swing.** It re-aims a swing you already own.
-- **It will not fix inconsistency.** Most of your cut distance is per-swing scatter that no
-  fixed setting reaches. Only the steady bias underneath it can be corrected.
+- **It will not fix inconsistency.** On that same history, **95% of the accuracy lost to cut
+  placement was per-swing scatter** that no fixed setting reaches: the cuts land in a wide
+  spread around a centre that is already nearly right, and an offset can only move the centre.
+  If your centring falls apart on dense passages, that is a swing problem and this mod will
+  tell you so rather than pretend a number fixes it.
 
 Your two hands will usually want different numbers. Applying one hand's answer to the other
 costs about as much as the right one gains, so it always fits them separately.
