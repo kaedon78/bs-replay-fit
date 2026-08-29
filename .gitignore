@@ -6,3 +6,6 @@ refs/
 .vs/
 __pycache__/
 *.pkl
+
+# Per-version plugin builds; produced by tools/build-all.ps1.
+dist/

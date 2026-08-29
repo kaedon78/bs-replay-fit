@@ -99,8 +99,11 @@ namespace ControllerAutoAdjust
                 {
                     _profiles = model;
                     _shared = model;
-                    _profiles.onControllerProfilesUIEvent += OnProfilesUI;
-                    Plugin.Log.Info("watching the controller profiles screen");
+                    GameApi.SubscribeProfilesUI(_profiles, OnProfilesUI, true);
+                    Plugin.Log.Info(GameApi.HasProfilesUIEvent
+                        ? "watching the controller profiles screen"
+                        : "no profiles-screen event on this game version; "
+                          + "relying on the anchor event and the poll");
                     break;
                 }
             }
@@ -217,7 +220,7 @@ namespace ControllerAutoAdjust
             _subscribed.Clear();
             if (_profiles != null)
             {
-                _profiles.onControllerProfilesUIEvent -= OnProfilesUI;
+                GameApi.SubscribeProfilesUI(_profiles, OnProfilesUI, false);
                 _profiles = null;
             }
         }

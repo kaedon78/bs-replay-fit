@@ -6,7 +6,17 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="manifest.json" />
+    <!-- The checked-in file carries a placeholder, not a version: one build per supported
+         game goes out, and a manifest naming the wrong one makes BSIPA warn on every launch
+         that the mod was built for something else. The version comes from the same property
+         that chose the reference set, so the two cannot disagree. -->
+    <!-- The resource name matters, not just its presence: BSIPA looks for
+         <AssemblyName>.manifest.json, which is what including a manifest.json from the
+         project root produces by default. Generating it elsewhere changes that name, and a
+         mod whose manifest BSIPA cannot find is skipped, it says so, in one NOTICE line
+         above the plugin list it is then absent from. -->
+    <EmbeddedResource Include="$(IntermediateOutputPath)manifest.json"
+                      LogicalName="$(AssemblyName).manifest.json" />
     <EmbeddedResource Include="Views\settings.bsml" />
   </ItemGroup>
 
@@ -70,5 +80,17 @@
       <HintPath>$(BSModdedInstallDir)Plugins\BSML.dll</HintPath><Private>false</Private>
     </Reference>
   </ItemGroup>
+
+  <!-- Before compile, because the resource has to exist by the time it is embedded. Not
+       incremental on purpose: WriteLinesToFile skips an identical file, and a changed
+       version has to reach the DLL or the build silently ships the previous one. -->
+  <Target Name="StampManifest" BeforeTargets="PrepareForBuild">
+    <PropertyGroup>
+      <StampedManifest>$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)\manifest.json').Replace('__GAMEVERSION__', '$(BSGameVersion)'))</StampedManifest>
+    </PropertyGroup>
+    <MakeDir Directories="$(IntermediateOutputPath)" />
+    <WriteLinesToFile File="$(IntermediateOutputPath)manifest.json" Lines="$(StampedManifest)"
+                      Overwrite="true" WriteOnlyWhenDifferent="true" />
+  </Target>
 
 </Project>

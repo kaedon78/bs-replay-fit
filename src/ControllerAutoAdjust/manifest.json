@@ -5,6 +5,6 @@
   "author": "Kaedon",
   "version": "0.1.0",
   "description": "Measures where your sabers actually cut and suggests a controller offset that lands them closer to centre.",
-  "gameVersion": "1.45.0",
+  "gameVersion": "__GAMEVERSION__",
   "dependsOn": { "BSIPA": "^4.3.0" }
 }

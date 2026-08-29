@@ -59,7 +59,11 @@ namespace ControllerAutoAdjust
             }
             try
             {
-                found.SetupAutoplayForAllControllers();
+                if (!GameApi.TryStartAutoplay(found))
+                {
+                    enabled = false;
+                    return;
+                }
                 _manager = found;
                 _startedAt = Time.time;
                 Plugin.Log.Warn("SYNTHETIC SWINGS ACTIVE -- cuts from this run are not a player");

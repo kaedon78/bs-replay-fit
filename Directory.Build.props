@@ -12,7 +12,13 @@
 
   <PropertyGroup>
     <RepoRoot>$(MSBuildThisFileDirectory)</RepoRoot>
-    <BSGameVersion Condition="'$(BSGameVersion)' == ''">1.45.0</BSGameVersion>
+    <!--
+      The oldest version supported, not the newest installed. A reference set is a ceiling
+      on what can be called, so building against the oldest is what makes one binary run on
+      every version above it: anything absent there cannot be bound by accident. The three
+      members that exist only in newer builds are reached through GameApi instead.
+    -->
+    <BSGameVersion Condition="'$(BSGameVersion)' == ''">1.40.5</BSGameVersion>
     <BSRefRoot Condition="'$(BSRefRoot)' == ''">C:\Dev\BSModUpdater\refs\</BSRefRoot>
 
     <BSRefDir>$(BSRefRoot)$(BSGameVersion)\</BSRefDir>

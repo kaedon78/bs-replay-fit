@@ -593,8 +593,13 @@ namespace ControllerAutoAdjust
             var playing = model.selectedProfile ?? target;
             var leftPosition = playing.leftController.position;
             var rightPosition = playing.rightController.position;
-            target.UpdateControllerOffset(true, leftPosition, advice.Left);
-            target.UpdateControllerOffset(false, rightPosition, advice.Right);
+            if (!GameApi.TrySetOffset(target, true, leftPosition, advice.Left)
+                || !GameApi.TrySetOffset(target, false, rightPosition, advice.Right))
+            {
+                Advice.Note = "This game version does not allow writing a profile.";
+                Advice.Publish();
+                return;
+            }
 
             // The search composed each candidate under this flag to decide where the blade
             // lands, so the profile has to agree with it or the numbers mean something else.
