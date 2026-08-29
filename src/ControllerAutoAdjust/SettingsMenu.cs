@@ -3,6 +3,8 @@ using System.ComponentModel;
 using System.Collections.Generic;
 using BeatSaberMarkupLanguage.Attributes;
 using BeatSaber.GameSettings;
+using BeatSaberMarkupLanguage.Components.Settings;
+using HMUI;
 using BeatSaberMarkupLanguage.Settings;
 using UnityEngine;
 using UnityEngine.UI;
@@ -95,6 +97,7 @@ namespace ControllerAutoAdjust
                 {
                     _shown = Advice.Version;
                     _registered.Refresh();
+                    _registered.RedrawRange();
                 }
                 // Every frame, not only on a version bump: the fill should move smoothly
                 // rather than in the steps the text updates on.
@@ -398,6 +401,57 @@ namespace ControllerAutoAdjust
 
         [UIComponent("fit-button")]
         private Button _fitButton;
+
+        /// <summary>
+        /// The range sliders, so their labels can be redrawn when the sessions arrive.
+        /// </summary>
+        /// <remarks>
+        /// A slider runs its formatter when its *value* changes, not when the host says a
+        /// property did. Both sliders sit at the same position before and after a read -- 0%
+        /// and 100% -- so nothing re-formatted them, and they went on reporting the "no
+        /// replays yet" they were built with while the panel above announced three hundred.
+        /// </remarks>
+        [UIComponent("from-slider")]
+        private SliderSetting _fromSlider;
+
+        [UIComponent("until-slider")]
+        private SliderSetting _untilSlider;
+
+        private int _sessionsShown = -1;
+
+        internal void RedrawRange()
+        {
+            var sessions = Advice.Sessions.Count;
+            if (sessions == _sessionsShown)
+            {
+                return;
+            }
+            _sessionsShown = sessions;
+            // Only when the session list itself changes: doing this every frame would fight
+            // the player for the handle they are dragging.
+            //
+            // ReceiveValue alone is not enough. It pulls the value back from the host, but the
+            // label is drawn by the slider underneath and only when that slider's own value
+            // moves -- and these sit at 0% and 100% before and after a read alike. So the
+            // labels kept the "no replays yet" they were built with, while adjusting either
+            // one by a notch showed the dates immediately, which is the shape of the bug.
+            Redraw(_fromSlider);
+            Redraw(_untilSlider);
+        }
+
+        private static void Redraw(SliderSetting setting)
+        {
+            if (setting == null)
+            {
+                return;
+            }
+            setting.ReceiveValue();
+            var slider = setting.Slider as TextSlider;
+            if (slider != null)
+            {
+                slider.Refresh();
+            }
+        }
 
         internal void DrawProgress()
         {

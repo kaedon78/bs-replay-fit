@@ -128,17 +128,6 @@ namespace ControllerAutoAdjust
                 return;
             }
 
-            // Built from every replay found, not from the ones this pass will open, so the
-            // sliders span the player's whole history. A capped list left its earlier half
-            // unreachable with nothing on screen explaining why.
-            Advice.Sessions = files
-                .Select(f => File.GetLastWriteTimeUtc(f).Date)
-                .GroupBy(d => d)
-                .OrderBy(g => g.Key)
-                .Select(g => new KeyValuePair<DateTime, int>(g.Key, g.Count()))
-                .ToList();
-            Advice.Publish();
-
             var epochs = OffsetJournal.Read();
             var found = new List<ReplayCuts.Extraction>();
 
@@ -212,7 +201,20 @@ namespace ControllerAutoAdjust
                 residuals.Add(cuts.Left.MedianResidual);
             }
 
+            RejectImpostors(found);
             _read = found;
+
+            // Built from the runs actually held, not from every file discovered. A third of a
+            // library is One Saber, too short or unreadable, and the read stops once it has
+            // enough -- so a timeline drawn from filenames offers dates with nothing behind
+            // them, and a range picked at either end can select no usable data at all while
+            // looking perfectly reasonable.
+            Advice.Sessions = found
+                .GroupBy(r => r.Played.Date)
+                .OrderBy(g => g.Key)
+                .Select(g => new KeyValuePair<DateTime, int>(g.Key, g.Count()))
+                .ToList();
+
             residuals.Sort();
 
             Plugin.Log.Info(
@@ -234,6 +236,55 @@ namespace ControllerAutoAdjust
             Advice.Summary = $"{found.Count} runs read of {seen} replays{biggest}. "
                              + "Set the range below, then fit.";
             Advice.Publish();
+        }
+
+        /// <summary>
+        /// Drop runs that are not the same hand as the rest.
+        /// </summary>
+        /// <remarks>
+        /// Not a quality filter. Filtering on run quality was measured and does not help: a
+        /// failed run, an early exit or an off-range difficulty is still the player's grip,
+        /// and excluding them moved the answer a degree or two while improving nothing.
+        ///
+        /// This is a different question -- whether a run came from the same process at all. A
+        /// swing harness driving the sabers along a fixed sweep produced a mean cut distance
+        /// of 46 cm against a normal 12 to 15, and it read as an ordinary session to every
+        /// other filter here. So would a friend trying the headset, or a one-handed session.
+        /// Judged against the player's own median rather than a fixed threshold, since the
+        /// whole point is that a grip is personal.
+        /// </remarks>
+        private static void RejectImpostors(List<ReplayCuts.Extraction> runs)
+        {
+            if (runs.Count < 8)
+            {
+                return;
+            }
+            var means = runs
+                .Select(r => r.Left.Cuts.Concat(r.Right.Cuts).Average(c => Mathf.Abs(c.Signed)))
+                .ToList();
+            var sorted = means.OrderBy(m => m).ToList();
+            var median = sorted[sorted.Count / 2];
+
+            // Generous: ordinary bad sessions sit well inside this, and the runs it is meant
+            // to catch are not close to it.
+            var limit = median * 2.5f;
+            var dropped = 0;
+            for (var i = runs.Count - 1; i >= 0; i--)
+            {
+                if (means[i] <= limit)
+                {
+                    continue;
+                }
+                Plugin.Log.Warn(
+                    $"ignoring {runs[i].Song}: mean cut {means[i] * 100f:F1} cm against a "
+                    + $"median of {median * 100f:F1} cm -- that is not the same hand");
+                runs.RemoveAt(i);
+                dropped++;
+            }
+            if (dropped > 0)
+            {
+                Plugin.Log.Info($"{dropped} run(s) set aside as not the player");
+            }
         }
 
         private static void Fit(OffsetState.Reading reading)
@@ -286,9 +337,20 @@ namespace ControllerAutoAdjust
             Advice.Left = "";
             Advice.Right = "";
             var advised = false;
-            var index = 0;
 
-            foreach (var group in groups.OrderByDescending(g => g.Runs.Count))
+            // The bar is divided by work, not by group. The search sweeps the same candidate
+            // grid whatever it is given, so its cost is proportional to the cuts in hand --
+            // and a run of 206 sessions beside one of 11 is not two equal halves. Split
+            // evenly, the bar sat at 50% for almost the whole fit and then finished instantly.
+            var ordered = groups.OrderByDescending(g => g.Runs.Count).ToList();
+            var totalCuts = 0L;
+            foreach (var group in ordered)
+            {
+                totalCuts += group.Runs.Sum(r => r.Left.Cuts.Count + r.Right.Cuts.Count);
+            }
+            var soFar = 0L;
+
+            foreach (var group in ordered)
             {
                 if (group.Runs.Any(r => !r.FromJournal))
                 {
@@ -304,13 +366,16 @@ namespace ControllerAutoAdjust
                     + (trusted ? "" : $" (under {MinRunsToRecommend}: shown, not recommended)"));
 
                 var show = trusted && !advised;
-                var span = 1f / Mathf.Max(groups.Count, 1);
+                var scale = totalCuts > 0 ? 1f / totalCuts : 0f;
+                var leftFrom = soFar * scale;
+                var leftSpan = leftCuts.Count * scale;
+                var rightSpan = rightCuts.Count * scale;
                 Report("   left", leftCuts, group.Epoch.LeftRotation, true, group.Epoch,
-                       trusted, show, index * span, span * 0.5f);
+                       trusted, show, leftFrom, leftSpan);
                 Report("   right", rightCuts, group.Epoch.RightRotation, false, group.Epoch,
-                       trusted, show, index * span + span * 0.5f, span * 0.5f);
+                       trusted, show, leftFrom + leftSpan, rightSpan);
+                soFar += leftCuts.Count + rightCuts.Count;
                 advised |= show;
-                index++;
                 Advice.Publish();
             }
 

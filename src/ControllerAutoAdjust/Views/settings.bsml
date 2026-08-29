@@ -19,12 +19,12 @@
             hover-hint='Reads your replay files. Slow, and only needed once per session.'/>
   </horizontal>
 
-  <slider-setting text='2. Use replays from' value='start-percent'
+  <slider-setting id='from-slider' text='2. Use replays from' value='start-percent'
                   min='0' max='100' increment='2' integer-only='true'
                   formatter='format-session'
                   hover-hint='Earliest session to fit on. Set this to when you last changed your grip.'/>
 
-  <slider-setting text='2. Use replays until' value='end-percent'
+  <slider-setting id='until-slider' text='2. Use replays until' value='end-percent'
                   min='0' max='100' increment='2' integer-only='true'
                   formatter='format-session'
                   hover-hint='Latest session to fit on.'/>

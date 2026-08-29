@@ -51,6 +51,10 @@
     </Reference>
     <!-- BSML ships as a mod rather than with the game, so it is resolved from the modded
          install. Assembly name and file name differ; the HintPath is what resolves. -->
+    <!-- TextSlider, whose Refresh() is what actually redraws a slider's label. -->
+    <Reference Include="HMUI">
+      <HintPath>$(BSRefDir)HMUI.dll</HintPath><Private>false</Private>
+    </Reference>
     <Reference Include="UnityEngine.UI">
       <HintPath>$(BSRefDir)UnityEngine.UI.dll</HintPath><Private>false</Private>
     </Reference>
