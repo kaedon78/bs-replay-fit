@@ -22,6 +22,11 @@ Every point missing was placement, none of it swinging.
 
 ## What it will and will not buy you
 
+*Superseded in part. The figures here were measured offline, before the cut model's sign was
+corrected, and on a smaller set. "Where the accuracy actually goes" below is the current
+measurement, from the mod's own cache over 300 runs; it agrees on the headline (+0.24 pp
+against +0.3%) and is more precise about the split.*
+
 Be honest with users about this. On the developing player a rigid offset explains only
 **8–11%** of the signed cut distance; mean distance is 11–14 cm, of which about 6 cm is
 fixed bias and 13–17 cm is per-swing scatter no setting reaches. Held out across sessions,
@@ -130,6 +135,126 @@ one is out by 8e-4.
 
 The lesson worth keeping: **a test that builds its input with the code under test proves
 self-consistency and nothing else.** Both sign errors in this project were of that shape.
+
+## Where the accuracy actually goes
+
+Measured over 300 runs and 210,000 cuts from the developing player's own history, using the
+mod's cache. Per note, out of 115:
+
+| | lost |
+|---|---|
+| swing points (70 + 30), already at 99.95% of maximum | 0.04 pp |
+| cut distance (the 15-point term) | 5.56 pp |
+
+Essentially the whole shortfall is placement, which is the argument for the mod looking only
+at that term. Implied accuracy 94.40%. Splitting the 5.56 pp by what a fixed offset can
+reach:
+
+| | |
+|---|---|
+| best whole-degree rotation | 0.24 pp |
+| adding a position offset as well | 0.27 pp |
+| per-swing scatter, unreachable by any fixed offset | **5.29 pp** |
+
+**Ninety-five percent of the loss is scatter.** The mod is a rounding correction against it,
+and the readme says so rather than implying otherwise.
+
+Position was checked and left out on evidence, not taste: adding it buys 0.03 pp, and to get
+that the fit wants to move the controller 5.9 cm one way on the left and the opposite way on
+the right. Large moves for nothing is what a badly identified parameter fitting noise looks
+like.
+
+## What the scatter is made of
+
+Three candidate structures were tested against the residual left after the best rigid fit.
+
+**Swing direction: no.** Bucketed by the cut normal's angle in the sabre frame, direction
+explains 1.5% of the variance on the left and 0.3% on the right. The two dominant clusters --
+up-swings and down-swings, 93% of cuts -- already sit near zero mean, so the rigid fit has
+centred the bulk properly. The only structure is on the left hand in two minority directions
+(4,900 cuts at -81 mm, 866 at -145 mm), about 6% of its cuts.
+
+**Distance along the blade: weakly, on the right.** Spread grows from 107 mm near the hilt to
+120 mm at the tip. The left hand does not show it.
+
+**Cadence: yes, strongly.** Comparing each run's fastest third of inter-cut gaps against *its
+own* slowest third, so map difficulty is held constant:
+
+| | left | right |
+|---|---|---|
+| fastest third minus slowest third | +19.3 mm | +24.8 mm |
+| worse when swinging fast | 235 of 300 runs | 268 of 300 runs |
+| t | +13.0 | +18.1 |
+
+Pooled across runs the gradient is roughly twice that, but only about half survives holding
+the map constant -- the rest is difficulty confounding, which is why the within-run pairing is
+the number to quote.
+
+Two mechanisms were separated with the replay's own per-cut sabre speed. Both raw speed and
+proximity to a swing reversal correlate with worse centring, and they are confounded, since a
+dense passage produces both. Holding speed roughly constant in bands, cuts taken soon after a
+reversal remain worse by 1.7 cm on the left and 0.9 cm on the right -- present, but smaller
+than speed and inconsistent across bands. The reversal detector is crude (a frame-to-frame
+velocity sign change, so tracking jitter registers as a false reversal), which will blur the
+effect toward zero.
+
+## Why cadence cannot be corrected here
+
+It is variance, not bias, and that is the whole answer.
+
+| | left | right |
+|---|---|---|
+| best turn on the fast third | +2.07, -5.18 deg | -2.57, +1.89 deg |
+| best turn on the slow third | +3.03, -5.09 deg | -1.93, +1.30 deg |
+| they differ by | 0.96 deg | 0.88 deg |
+| spread after each gets its *own* best turn | 194 vs 172 mm | 171 vs 141 mm |
+| gain from a perfect per-cadence offset | +0.020 pp | +0.034 pp |
+
+Fast and slow cuts want the same offset to within a degree, which is under the whole-degree
+step the settings screen accepts. Give each group its own optimum and the fast cuts are still
+22 and 30 mm wider, with mean residuals near zero on both sides. Swinging faster does not move
+where the cuts centre; it scatters them around the same centre.
+
+An offset translates and rotates the blade, which moves the centre of a distribution. It has
+no mechanism to narrow one, and a deviation that depends on where you are in a swing cannot be
+undone by a number that is the same at every point of every swing. Even an oracle switching
+offsets per cut -- unshippable anyway, since it means moving sabres at runtime -- buys 0.03 pp.
+
+So the honest ordering of what is on the table:
+
+| | worth |
+|---|---|
+| narrowing the fast-cadence spread to match the slow-cadence one | ~1 pp |
+| the static offset this mod fits | 0.24 pp |
+| cadence-aware offsets on top | 0.03 pp |
+
+The largest item is not a settings change. The mod's useful role there is diagnostic, and the
+per-cut gap since the hand's previous cut is carried in the cache so it can be asked again.
+
+## A misreading worth recording
+
+The lever was briefly changed to measure to the recorded cut point rather than to the note
+centre, on the grounds that 30% of values were "impossible" -- past a metre, sometimes behind
+the hand. Both halves of that were wrong, and the correction is worth keeping written down.
+
+The lever is not a point on the sabre. What rotates is the cut plane, about the grip that lies
+in it, and what is measured is how far the *note* sits from that plane: turning by `t` changes
+that distance by `dot(t, m x (centre - grip))`. The arm is the note's own position, so a value
+past a metre is a note further away than the blade is long, and a negative one is a note behind
+the grip along the blade.
+
+The cut point is the worse choice: over 12,000 cuts it sits about 21 cm off the blade axis, and
+no constant local offset removes that, so it is a point in the cut plane near the note rather
+than on the sabre. The change moved the fit by 0.02 degrees, because the difference between the
+two points lies almost along the cut normal while the lever only sees the part along the blade.
+
+Two things the investigation did settle, by measurement rather than argument:
+
+- **The replay records the sabre pose, not the pre-offset controller pose.** Perpendicular
+  distance from the cut point to the blade axis is 21 cm under the first reading and 85 cm
+  under the second.
+- **The frame clock agrees with the note clock.** Sweeping a timing offset from -80 ms to
+  +80 ms puts the minimum sharply at zero.
 
 ## Design decisions worth not relitigating
 
