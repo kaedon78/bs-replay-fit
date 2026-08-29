@@ -129,6 +129,9 @@ namespace ControllerAutoAdjust
             }
 
             var epochs = OffsetJournal.Read();
+            var cache = CutCache.Load();
+            var keep = new Dictionary<string, CutCache.Entry>(StringComparer.OrdinalIgnoreCase);
+            var reused = 0;
             var found = new List<ReplayCuts.Extraction>();
 
             // Counted by reason. "250 skipped" cannot distinguish a library full of One Saber
@@ -154,9 +157,22 @@ namespace ControllerAutoAdjust
                 }
                 if (++seen % 25 == 0)
                 {
-                    Advice.Summary = $"Reading replays... {found.Count} of {TargetUsableRuns}";
+                    Advice.Summary = $"Reading replays... {found.Count} of {TargetUsableRuns}"
+                                     + (reused > 0 ? $" ({reused} cached)" : "");
                     Advice.Progress = (float)found.Count / TargetUsableRuns;
                     Advice.Publish();
+                }
+
+                // Reduced already, and the file has not moved since? Then the expensive part
+                // is done. This is what makes a second read near-instant and a new replay the
+                // only thing actually parsed.
+                var written = File.GetLastWriteTimeUtc(file).Ticks;
+                if (cache.TryGetValue(file, out var cached) && cached.WrittenTicks == written)
+                {
+                    keep[file] = cached;
+                    found.Add(cached.Cuts);
+                    reused++;
+                    continue;
                 }
 
                 Bsor.Replay replay;
@@ -192,16 +208,25 @@ namespace ControllerAutoAdjust
 
                 // The journal is fact and is resolved now. Anything it does not cover depends
                 // on the profile the player names, which is step two, so it waits for the fit.
-                var when = File.GetLastWriteTimeUtc(file);
-                cuts.Played = when;
-                cuts.FromJournal = OffsetJournal.TryAt(epochs, when, out var epoch);
-                cuts.Epoch = epoch;
+                cuts.Played = File.GetLastWriteTimeUtc(file);
                 found.Add(cuts);
+                keep[file] = new CutCache.Entry { WrittenTicks = written, Cuts = cuts };
                 speeds.Add(cuts.Left.NoteSpeed);
                 residuals.Add(cuts.Left.MedianResidual);
             }
 
             RejectImpostors(found);
+
+            // Which settings each run was played on is resolved now rather than cached. The
+            // journal gains entries and the player changes assignments after a read, so a
+            // stored answer would be a stale one that looks exactly like a fresh one.
+            foreach (var run in found)
+            {
+                run.FromJournal = OffsetJournal.TryAt(epochs, run.Played, out var epoch);
+                run.Epoch = epoch;
+            }
+
+            CutCache.Save(keep);
             _read = found;
 
             // Built from the runs actually held, not from every file discovered. A third of a
@@ -219,6 +244,7 @@ namespace ControllerAutoAdjust
 
             residuals.Sort();
 
+            Plugin.Log.Info($"{reused} replays reused from cache, {seen - reused} opened");
             Plugin.Log.Info(
                 $"replays: {found.Count} used, {seen - found.Count} skipped, "
                 + $"{seen} of {files.Count} opened ("

@@ -76,9 +76,24 @@ namespace ControllerAutoAdjust
             private float _next;
 
             private int _shown = -1;
+            private bool _autoRead;
 
             private void Update()
             {
+                // A read at startup, for testing the read itself without a hand on the
+                // button. Behind a marker so it cannot happen to a player: doing this
+                // uninvited is exactly what the button replaced.
+                if (!_autoRead && Recommender.HasRead == false && !Recommender.Running)
+                {
+                    _autoRead = true;
+                    if (System.IO.File.Exists(
+                            System.IO.Path.Combine(Paths.DataDir, "read-on-start.on")))
+                    {
+                        Plugin.Log.Info("read-on-start marker present; reading");
+                        Recommender.BeginRead();
+                    }
+                }
+
                 if (_registered == null)
                 {
                     if (Time.unscaledTime < _next)
