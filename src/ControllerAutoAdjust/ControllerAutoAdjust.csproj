@@ -41,6 +41,13 @@
     <Reference Include="BeatmapCore">
       <HintPath>$(BSRefDir)BeatmapCore.dll</HintPath><Private>false</Private>
     </Reference>
+    <!-- ControllerProfilesModel, and the provider that reads it. -->
+    <Reference Include="BeatSaber.GameSettings">
+      <HintPath>$(BSRefDir)BeatSaber.GameSettings.dll</HintPath><Private>false</Private>
+    </Reference>
+    <Reference Include="DataModels">
+      <HintPath>$(BSRefDir)DataModels.dll</HintPath><Private>false</Private>
+    </Reference>
   </ItemGroup>
 
 </Project>

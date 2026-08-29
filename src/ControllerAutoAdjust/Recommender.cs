@@ -51,15 +51,7 @@ namespace ControllerAutoAdjust
         /// </remarks>
         private const int MinRunsToRecommend = 20;
 
-        /// <summary>
-        /// How often the live settings are re-read.
-        /// </summary>
-        /// <remarks>
-        /// Journalling only at startup leaves a hole exactly where it matters: change the
-        /// grip in the menu, keep playing, and those runs are filed under the previous
-        /// settings until the next launch -- the misattribution the journal exists to
-        /// prevent. Settings can only change between songs, so a slow poll closes it.
-        /// </remarks>
+        /// <summary>How often to check whether the controllers are up yet.</summary>
         private const float WatchEvery = 2f;
 
         private Thread _worker;
@@ -74,14 +66,13 @@ namespace ControllerAutoAdjust
             }
             _nextWatch = Time.unscaledTime + WatchEvery;
 
-            // Read on the main thread: the live settings hang off Unity objects.
-            if (!OffsetState.TryRead(out var reading))
+            if (_started)
             {
                 return;
             }
-            OffsetJournal.RecordIfChanged(reading);
-
-            if (_started)
+            // Read on the main thread: the live settings hang off Unity objects. Keeping
+            // them current is SettingsWatcher's job, not this one's.
+            if (!OffsetState.TryRead(out var reading))
             {
                 return;
             }
