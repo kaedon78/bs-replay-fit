@@ -34,6 +34,13 @@
     <Reference Include="Main">
       <HintPath>$(BSRefDir)Main.dll</HintPath><Private>false</Private>
     </Reference>
+    <!-- NoteCutInfo is in GameplayCore, NoteData in BeatmapCore; neither is in Main. -->
+    <Reference Include="GameplayCore">
+      <HintPath>$(BSRefDir)GameplayCore.dll</HintPath><Private>false</Private>
+    </Reference>
+    <Reference Include="BeatmapCore">
+      <HintPath>$(BSRefDir)BeatmapCore.dll</HintPath><Private>false</Private>
+    </Reference>
   </ItemGroup>
 
 </Project>

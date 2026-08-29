@@ -26,7 +26,8 @@ namespace ControllerAutoAdjust
             _host = new GameObject("ControllerAutoAdjust");
             Object.DontDestroyOnLoad(_host);
             _host.AddComponent<OffsetProbe>();
-            Log.Info("OnStart: probe attached");
+            _host.AddComponent<CutRecorder>();
+            Log.Info("OnStart: probe and recorder attached");
         }
 
         [OnExit]
@@ -34,6 +35,8 @@ namespace ControllerAutoAdjust
         {
             if (_host != null)
             {
+                // Flush first: Destroy would take the pending cuts with it.
+                _host.GetComponent<CutRecorder>()?.Flush();
                 Object.Destroy(_host);
             }
             Log.Info("OnExit");

@@ -87,15 +87,19 @@ transform reproduces to four decimals on both hands:
 The platform's root pose left-multiplies the rotation and therefore cancels out of any
 difference between two settings, which is what makes the search computable at all.
 
-`legacyRotationOffset` is **zero for this player**, and that is not an artefact of testing
-under `fpfc`. Every archived log from real VR sessions carries
-`[UnityXRHelper] Unexpected manufacturer name: Unknown` — detection fails for an Index over
-SteamVR/OpenXR, so `TryGetLegacyPoseOffsetForNode` returns false and leaves the offset at
-zero. The game's source would otherwise apply -16.3 degrees of X for a Valve Index, so a mod
-shipping to other people must read this at runtime rather than assume either case.
+`legacyRotationOffset` is **zero for this player**, but note carefully where that comes from.
+Under `fpfc` the probe reports it zero via `DevicelessVRHelper`, which says nothing about VR
+— with no device present the helper returns zeros whatever the hardware would have done. The
+evidence for the VR case is separate and stronger: every archived log from a real VR session
+carries `[UnityXRHelper] Unexpected manufacturer name: Unknown`, so
+`TryGetLegacyPoseOffsetForNode` returns false and leaves the offset at zero there too.
 
-That also means fpfc runs are representative here, which is what makes the loop developable
-without a headset.
+The game's source would otherwise apply -16.3 degrees of X for a Valve Index. A mod shipping
+to other people must therefore read this at runtime and never assume either case — the two
+differ by more than the whole correction being applied.
+
+Because it is zero in both, fpfc runs are representative *here*, which is what makes the loop
+developable without a headset.
 
 ## Status
 
