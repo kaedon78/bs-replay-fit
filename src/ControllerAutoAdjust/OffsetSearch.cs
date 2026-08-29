@@ -51,9 +51,19 @@ namespace ControllerAutoAdjust
     /// saber along its own axis cannot change any cut distance. The search reports what the
     /// geometry supports rather than inventing a third number.
     ///
-    /// Points are what is maximised, not centring. Least squares would let a single cut 40 cm
-    /// out drag the answer around, where the 15-point term stopped caring about that cut at
-    /// 30 cm.
+    /// Points are what is maximised, not centring, and that choice is what makes the search
+    /// robust without a single outlier filter. The accuracy term saturates at 30 cm, so a cut
+    /// 40 cm out is worth zero under every candidate alike and cannot pull the answer
+    /// anywhere; weighted least squares fitted to the same cuts would let that one drag it.
+    /// Nothing here rejects a wild cut, because nothing needs to -- and a filter would only
+    /// add a threshold to get wrong.
+    ///
+    /// The corollary is worth stating, since a least-squares fit of the same model is the
+    /// obvious thing to reach for and was here until it lost its last caller. It answers a
+    /// different question. Continuous, so it can compare two groups of cuts to each other
+    /// where whole-degree steps would quantise the difference away -- but the wrong objective
+    /// for choosing a setting, for exactly the reason above. If one comes back, it should not
+    /// come back as the thing that picks the numbers a player types in.
     ///
     /// Maximising them is the same thing as maximising accuracy. The gain is reported over
     /// the most those same cuts could have scored, and that ceiling does not move with the
@@ -116,12 +126,18 @@ namespace ControllerAutoAdjust
         }
 
         /// <summary>
-        /// The same sum over flat arrays, which is the form the search runs millions of times.
+        /// Weighted accuracy points these cuts would score under a turn, over flat arrays.
         /// </summary>
         /// <remarks>
         /// Arrays rather than <c>IReadOnlyList</c>, which costs an interface dispatch per
         /// element when the element count is every cut times every candidate. The per-cut
         /// terms are folded in advance too, since none of them depend on the candidate.
+        ///
+        /// There was a readable twin of this taking a list of samples, kept as the plain
+        /// statement of what the fast one computes. It had no callers, and two functions
+        /// computing the same thing is a place for them to stop agreeing quietly: correcting
+        /// the sign of the shift had to be done in both, and nothing would have caught it if
+        /// one had been missed.
         /// </remarks>
         private static float ScoreFlat(
             float[] signed, float[] alongY, float[] alongX, float[] weight, Vector2 turn)
@@ -133,56 +149,6 @@ namespace ControllerAutoAdjust
                 total += weight[i] * AccuracyPoints(moved < 0f ? -moved : moved);
             }
             return total;
-        }
-
-        /// <summary>Weighted accuracy points these cuts would have scored under a turn.</summary>
-        internal static float Score(IReadOnlyList<CutSample> cuts, Vector2 turn)
-        {
-            var total = 0f;
-            for (var i = 0; i < cuts.Count; i++)
-            {
-                total += cuts[i].Multiplier * AccuracyPoints(DistanceUnder(cuts[i], turn));
-            }
-            return total;
-        }
-
-        /// <summary>
-        /// The turn these cuts are asking for, by weighted least squares.
-        /// </summary>
-        /// <remarks>
-        /// A continuous estimate, used where the question is "what is this group's residual"
-        /// rather than "which setting should be typed" -- comparing sessions to each other,
-        /// where a grid search's whole-degree steps would quantise away the differences being
-        /// looked for. Least squares is the wrong objective for choosing a setting, because a
-        /// cut 40 cm out drags it while the 15-point term stopped caring at 30, but for
-        /// comparing like with like that bias is the same in every session.
-        /// </remarks>
-        internal static Vector2 FitTurn(IReadOnlyList<CutSample> cuts)
-        {
-            // Normal equations for -signed ~ lever * (tx*my - ty*mx), weighted by multiplier.
-            double axx = 0, axy = 0, ayy = 0, bx = 0, by = 0;
-            for (var i = 0; i < cuts.Count; i++)
-            {
-                var c = cuts[i];
-                double u = c.Lever * c.AcrossY;
-                double v = -c.Lever * c.AcrossX;
-                double w = c.Multiplier;
-                axx += w * u * u;
-                axy += w * u * v;
-                ayy += w * v * v;
-                // Against the negated distance, matching DistanceUnder: the turn wanted is
-                // the one whose shift cancels the gap, not the one that reproduces it.
-                bx -= w * u * c.Signed;
-                by -= w * v * c.Signed;
-            }
-            var det = axx * ayy - axy * axy;
-            if (System.Math.Abs(det) < 1e-12)
-            {
-                return Vector2.zero;
-            }
-            return new Vector2(
-                (float)((ayy * bx - axy * by) / det),
-                (float)((axx * by - axy * bx) / det));
         }
 
         /// <summary>
