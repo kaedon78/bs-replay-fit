@@ -178,16 +178,20 @@ namespace ControllerAutoAdjust
                     Signed = signed,
                     AcrossX = across.x,
                     AcrossY = across.y,
-                    // Measured to where the blade crossed, which the replay records, and not
-                    // to the note's centre, which is rebuilt. The centre's depth comes from
-                    // speed times timing error, and at seventeen metres a second a twenty
-                    // millisecond deviation puts it a third of a metre further down the lane.
-                    // That is true of the note and false of the moment arm, and it does not
-                    // show up in the residual check: that measures error along the cut
-                    // normal, which for a vertical swing is horizontal, while the depth error
-                    // is almost at right angles to it. Three cuts in ten came out with a
-                    // lever no sabre could have, some of them behind the hand.
-                    Lever = Vector3.Dot(point[i] - grip, blade),
+                    // To the note, not to the cut point, and not bounded by the sabre's
+                    // length. What rotates is the cut plane, about the grip that lies in it,
+                    // and what is being measured is how far the note sits from that plane. So
+                    // the arm is the note's own position: turning by t changes the distance
+                    // by dot(t, m x (centre - grip)), whose in-plane part is this projection.
+                    //
+                    // A value past a metre is not an error. It is where the note is, and the
+                    // note can be further away than the blade is long; a negative one is a
+                    // note behind the grip along the blade, which awkward cuts produce. This
+                    // was briefly changed to measure to the recorded cut point on the grounds
+                    // that those values were impossible, which was a misreading of what the
+                    // quantity is. The cut point is not even on the blade -- it sits about
+                    // 21 cm off the axis, measured, and no constant offset removes that.
+                    Lever = Vector3.Dot(centre - grip, blade),
                     Multiplier = multipliers[index[i]],
                     SincePrevious = i == 0 ? 0f : when - good[index[i - 1]].EventTime,
                 });

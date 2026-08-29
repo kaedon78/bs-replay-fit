@@ -44,8 +44,12 @@ namespace ControllerAutoAdjust
         ///
         /// Version 3: the moment arm measured to the recorded cut point rather than to the
         /// rebuilt note centre, and the gap since the hand's previous cut carried alongside.
+        ///
+        /// Version 4: that moment arm put back. The plane rotates about the grip and the note
+        /// is what is being measured from it, so the arm is the note's position and is not
+        /// bounded by the sabre's length. Version 3 was a fix for a problem that was not one.
         /// </remarks>
-        private const int Version = 3;
+        private const int Version = 4;
 
         private static string Path => System.IO.Path.Combine(Paths.DataDir, FileName);
 
