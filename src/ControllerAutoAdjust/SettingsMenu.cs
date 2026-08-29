@@ -46,7 +46,7 @@ namespace ControllerAutoAdjust
             }
             foreach (var name in new[]
                      {
-                         nameof(Status), nameof(Advisory), nameof(AssignmentList), nameof(StartPercent), nameof(EndPercent),
+                         nameof(Status), nameof(EvidenceLine), nameof(Advisory), nameof(AssignmentList), nameof(StartPercent), nameof(EndPercent),
                          nameof(ReadButton), nameof(FitButton),
                          nameof(ProfileChoices), nameof(Profile),
                          nameof(TimelineRow), nameof(ActionNote),
@@ -657,8 +657,18 @@ namespace ControllerAutoAdjust
         /// a third of the data looked like one that governed all of it.
         /// </remarks>
         [UIValue("status")]
-        public string Status => Advice.Summary
-            + (Advice.Evidence.Length > 0 ? "\n" + Advice.Evidence : "");
+        public string Status => Advice.Summary;
+
+        /// <summary>
+        /// What the mod cannot work out for itself, placed where it is acted on.
+        /// </summary>
+        /// <remarks>
+        /// It ends "assigned below", and sat two rows above a chart and a button. Directly
+        /// over the controls it refers to, it reads as a caption for them rather than as one
+        /// more line of status.
+        /// </remarks>
+        [UIValue("evidence")]
+        public string EvidenceLine => Recommender.HasRead ? Advice.Evidence : "";
 
         /// <summary>
         /// The range being described right now, so the labels say which one they build.
@@ -737,8 +747,14 @@ namespace ControllerAutoAdjust
                 // Bars on their own line at a fixed cell width, dates beneath. Sharing a
                 // line with the dates left about two thirds of the row for the chart,
                 // which is what held the column count down.
+                var runs = 0;
+                foreach (var sitting in sessions)
+                {
+                    runs += sitting.Runs;
+                }
                 return $"<mspace=2>{new string(bar)}</mspace>\n"
-                       + $"{first:MMM d} to {sessions[sessions.Count - 1].Start:MMM d}";
+                       + $"{runs} runs from {first:MMM d} to "
+                       + $"{sessions[sessions.Count - 1].Start:MMM d}";
             }
         }
 

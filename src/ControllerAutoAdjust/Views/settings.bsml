@@ -7,7 +7,7 @@
        Height for two lines and then some: a text overflowing its box is centred on the box,
        so it spills equally above and below, and the half above the first row is outside the
        scroll viewport entirely. There is no scrolling up to reach it. -->
-  <horizontal pref-height='11' pref-width='90'>
+  <horizontal pref-height='6' pref-width='90'>
     <text text='~status' align='Center' font-size='3.2'/>
   </horizontal>
 
@@ -28,6 +28,11 @@
   <horizontal pref-height='8' pref-width='90'>
     <action-button id='read-button' text='~read-button' on-click='read'
             hover-hint='Reads your replay files. Slow, and only needed once per session.'/>
+  </horizontal>
+
+  <!-- Directly over the controls it talks about: the line ends "assigned below". -->
+  <horizontal pref-height='7' pref-width='90'>
+    <text text='~evidence' align='Center' font-size='2.9'/>
   </horizontal>
 
   <!-- The ranges already assigned, above the controls that add another. They are the state

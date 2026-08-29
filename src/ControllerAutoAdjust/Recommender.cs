@@ -272,10 +272,7 @@ namespace ControllerAutoAdjust
                     + $"fitted note speed {speeds.Average():F1} m/s");
             }
 
-            var biggest = why.Count == 0
-                ? ""
-                : why.OrderByDescending(k => k.Value).Select(k => $", {k.Value} {k.Key}").First();
-            Advice.Summary = $"{found.Count} runs read of {seen} replays{biggest}.";
+            Advice.Summary = "";
             Advice.Publish();
         }
 
