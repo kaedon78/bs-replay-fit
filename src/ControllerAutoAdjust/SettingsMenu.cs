@@ -46,7 +46,7 @@ namespace ControllerAutoAdjust
             }
             foreach (var name in new[]
                      {
-                         nameof(Status), nameof(Scope), nameof(Advisory), nameof(AssignmentList), nameof(StartPercent), nameof(EndPercent),
+                         nameof(Status), nameof(Advisory), nameof(AssignmentList), nameof(StartPercent), nameof(EndPercent),
                          nameof(ReadButton), nameof(FitButton),
                          nameof(ProfileChoices), nameof(Profile),
                          nameof(TimelineRow), nameof(ActionNote),
@@ -436,6 +436,31 @@ namespace ControllerAutoAdjust
             Advice.Publish();
         }
 
+        /// <summary>
+        /// Drop the most recent assigned range.
+        /// </summary>
+        /// <remarks>
+        /// The latest rather than any of them, because there is nowhere to pick from: the
+        /// list is a block of text, and a control to choose a row would cost more of the
+        /// panel than it is worth for the two or three ranges a history usually needs. Ranges
+        /// are built newest last, so undoing in that order matches how they were made.
+        /// </remarks>
+        [UIAction("remove-last")]
+        public void RemoveLastAssignment()
+        {
+            var list = Preferences.Assignments;
+            if (list.Count == 0)
+            {
+                Advice.Note = "No ranges to remove.";
+                Advice.Publish();
+                return;
+            }
+            var last = list[list.Count - 1];
+            Preferences.RemoveAssignment(last);
+            Advice.Note = $"Removed {last.From:d MMM HH:mm} to {last.To:d MMM HH:mm}.";
+            Advice.Publish();
+        }
+
         [UIAction("clear-assignments")]
         public void ClearAssignments()
         {
@@ -631,14 +656,6 @@ namespace ControllerAutoAdjust
         /// from", they read as a filter over everything, which is how a control that governs
         /// a third of the data looked like one that governed all of it.
         /// </remarks>
-        [UIValue("scope")]
-        public string Scope => !Recommender.HasRead
-            ? ""
-            : Advice.UnknownRuns == 0
-                ? "Every run has recorded settings."
-                : $"The settings below apply to the {Advice.UnknownRuns} runs from before "
-                  + "this mod was installed.";
-
         [UIValue("status")]
         public string Status => Advice.Summary
             + (Advice.Evidence.Length > 0 ? "\n" + Advice.Evidence : "");

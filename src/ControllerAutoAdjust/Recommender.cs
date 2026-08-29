@@ -275,8 +275,7 @@ namespace ControllerAutoAdjust
             var biggest = why.Count == 0
                 ? ""
                 : why.OrderByDescending(k => k.Value).Select(k => $", {k.Value} {k.Key}").First();
-            Advice.Summary = $"{found.Count} runs read of {seen} replays{biggest}. "
-                             + "Set the range below, then fit.";
+            Advice.Summary = $"{found.Count} runs read of {seen} replays{biggest}.";
             Advice.Publish();
         }
 
@@ -499,12 +498,12 @@ namespace ControllerAutoAdjust
         {
             if (unknown.Count == 0)
             {
-                return $"All {total} runs have recorded settings. Nothing to fill in.";
+                return $"All {total} runs have recorded settings. Ready to fit.";
             }
             var known = total - unknown.Count;
             var lead = known > 0
-                ? $"{known} runs have recorded settings; {unknown.Count} predate this mod."
-                : $"All {unknown.Count} runs predate this mod.";
+                ? $"{known} runs have recorded settings; {unknown.Count} predate this mod"
+                : $"All {unknown.Count} runs predate this mod";
 
             var sessions = unknown
                 .GroupBy(r => r.Played.Date)
@@ -536,7 +535,7 @@ namespace ControllerAutoAdjust
                     + $"{verdict.TestableTo:d MMM}, largest shift {verdict.GapDegrees:F1} deg "
                     + "(changes outside those dates are not visible to it)");
             }
-            return lead + " Assign the ranges below.";
+            return lead + " and need a range assigned below.";
         }
 
         /// <summary>Two settings are the same epoch if they put the blade in the same place.</summary>

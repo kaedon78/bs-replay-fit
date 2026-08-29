@@ -258,14 +258,30 @@ namespace ControllerAutoAdjust
             }
         }
 
+        private static string Serialise(Assignment a) =>
+            a.From.ToString("o", Culture) + "|" + a.To.ToString("o", Culture) + "|"
+            + Vec(a.LeftRotation) + "|" + Vec(a.RightRotation) + "|"
+            + (a.AlternativeHandling ? "1" : "0");
+
         internal static void AddAssignment(Assignment a)
         {
-            AppendKey("assign",
-                a.From.ToString("o", Culture) + "|" + a.To.ToString("o", Culture) + "|"
-                + Vec(a.LeftRotation) + "|" + Vec(a.RightRotation) + "|"
-                + (a.AlternativeHandling ? "1" : "0"));
+            AppendKey("assign", Serialise(a));
             Plugin.Log.Info(
                 $"assigned {a.From:d MMM} to {a.To:d MMM}: L {a.LeftRotation} R {a.RightRotation}");
+        }
+
+        /// <summary>
+        /// Drop one assignment, matched on exactly the text it was stored as.
+        /// </summary>
+        /// <remarks>
+        /// By value rather than by position, because the list is shown sorted by date and
+        /// stored in the order it was added: an index that means one entry on screen can mean
+        /// a different one in the file, and the failure is silent.
+        /// </remarks>
+        internal static void RemoveAssignment(Assignment a)
+        {
+            RemoveLine("assign", Serialise(a));
+            Plugin.Log.Info($"removed the range {a.From:d MMM} to {a.To:d MMM}");
         }
 
         internal static void ClearAssignments() => RemoveAll("assign");
@@ -303,6 +319,36 @@ namespace ControllerAutoAdjust
             try
             {
                 File.AppendAllText(Path, key + "=" + value + "\n", new UTF8Encoding(false));
+            }
+            catch (Exception e)
+            {
+                Plugin.Log.Error($"could not write preferences: {e.Message}");
+            }
+        }
+
+        /// <summary>Drop the first line holding exactly this key and value.</summary>
+        private static void RemoveLine(string key, string value)
+        {
+            try
+            {
+                if (!File.Exists(Path))
+                {
+                    return;
+                }
+                var wanted = key + "=" + value;
+                var kept = new List<string>();
+                var dropped = false;
+                foreach (var line in File.ReadAllLines(Path))
+                {
+                    if (!dropped && line.Trim() == wanted)
+                    {
+                        dropped = true;
+                        continue;
+                    }
+                    kept.Add(line);
+                }
+                File.WriteAllText(
+                    Path, string.Join("\n", kept) + "\n", new UTF8Encoding(false));
             }
             catch (Exception e)
             {

@@ -30,10 +30,6 @@
             hover-hint='Reads your replay files. Slow, and only needed once per session.'/>
   </horizontal>
 
-  <horizontal pref-height='7' pref-width='90'>
-    <text text='~scope' align='Center' font-size='2.9'/>
-  </horizontal>
-
   <!-- The ranges already assigned, above the controls that add another. They are the state
        the rest of the panel builds on, and below the buttons they were off the bottom of the
        viewport, so a panel at its resting scroll position said nothing about what had been
@@ -63,6 +59,8 @@
   <horizontal pref-height='7' pref-width='90' spacing='2'>
     <button text='Assign that range' on-click='assign'
             hover-hint='Records the range and profile above as one segment, so several grips can be described.'/>
+    <button text='Remove last' on-click='remove-last'
+            hover-hint='Forget the most recent assigned range.'/>
     <button text='Clear' on-click='clear-assignments'
             hover-hint='Forget every assigned range.'/>
   </horizontal>
