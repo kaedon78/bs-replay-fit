@@ -1,6 +1,7 @@
 # ReplayFit
 
 [![Latest release](https://img.shields.io/github/v/release/kaedon78/bs-replay-fit?label=latest%20release)](https://github.com/kaedon78/bs-replay-fit/releases/latest)
+[![License: MIT](https://img.shields.io/github/license/kaedon78/bs-replay-fit)](LICENSE)
 
 Beat Saber scores every note out of 115: 70 for winding up far enough, 30 for following
 through, and 15 for how close to the note's centre your blade passed. The first two come
