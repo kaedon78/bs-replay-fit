@@ -132,3 +132,7 @@ gave it.
 The log is `Logs/_latest.log` in your Beat Saber folder, and every line from this mod is
 tagged `ReplayFit`. That log is the most useful thing you can attach to a bug
 report.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
