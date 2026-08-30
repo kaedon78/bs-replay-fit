@@ -1,0 +1,20 @@
+# Every text file is stored LF in the repository; what lands in the working tree is the
+# platform's business. The index is already uniformly LF, so this normalises nothing and
+# changes no committed bytes — it stops the result depending on whether whoever cloned it
+# happens to have core.autocrlf set.
+* text=auto
+
+# Windows-only scripts, and never run anywhere else. Some PowerShell hosts and editors
+# still expect CRLF from a .ps1.
+*.ps1 text eol=crlf
+
+# Read by tools rather than by a Windows shell, so keep them LF on every platform.
+*.py text eol=lf
+*.sh text eol=lf
+
+# Marked in case one is ever committed despite .gitignore. Line-ending translation applied
+# to a compiled assembly corrupts it, and it fails looking like a code bug rather than a
+# mangled file.
+*.dll binary
+*.pdb binary
+*.zip binary
