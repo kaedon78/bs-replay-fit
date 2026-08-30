@@ -57,7 +57,15 @@ namespace ReplayFit
             }
         }
 
-        internal const string MenuName = "ReplayFit";
+        /// <summary>
+        /// The label in the mod settings list, spaced where the identifier cannot be.
+        /// </summary>
+        /// <remarks>
+        /// Only the label. The plugin id, the assembly and the folder under UserData stay
+        /// ReplayFit, because those are identifiers and one of them names the folder the
+        /// journal lives in.
+        /// </remarks>
+        internal const string MenuName = "Replay Fit";
         internal const string Resource = "ReplayFit.Views.settings.bsml";
 
         private const string CurrentSettings = "As they are now";
