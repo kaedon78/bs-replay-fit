@@ -4,7 +4,7 @@ using System.IO;
 using System.Text;
 using UnityEngine;
 
-namespace ControllerAutoAdjust
+namespace ReplayFit
 {
     /// <summary>
     /// Keeps the reduced form of each replay, so it is parsed once and not once per session.

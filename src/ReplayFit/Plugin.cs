@@ -2,7 +2,7 @@ using IPA;
 using UnityEngine;
 using IPALogger = IPA.Logging.Logger;
 
-namespace ControllerAutoAdjust
+namespace ReplayFit
 {
     [Plugin(RuntimeOptions.SingleStartInit)]
     public class Plugin
@@ -23,7 +23,7 @@ namespace ControllerAutoAdjust
         {
             // A DontDestroyOnLoad host, because the probe has to outlive the scene change
             // from menu to gameplay and back.
-            _host = new GameObject("ControllerAutoAdjust");
+            _host = new GameObject("ReplayFit");
             Object.DontDestroyOnLoad(_host);
             _host.AddComponent<OffsetProbe>();
             _host.AddComponent<CutRecorder>();

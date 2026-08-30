@@ -9,7 +9,7 @@
 # builds clean and tells BSIPA it is for the version you built last.
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-$project = Join-Path $root 'src\ControllerAutoAdjust\ControllerAutoAdjust.csproj'
+$project = Join-Path $root 'src\ReplayFit\ReplayFit.csproj'
 
 foreach ($version in @('1.40.5', '1.45.0')) {
     $out = Join-Path $root "dist\$version"

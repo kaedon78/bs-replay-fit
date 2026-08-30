@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace ControllerAutoAdjust
+namespace ReplayFit
 {
     /// <summary>
     /// Turns a replay into the same per-cut numbers the live recorder produces.

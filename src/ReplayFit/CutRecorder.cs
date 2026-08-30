@@ -6,7 +6,7 @@ using System.Linq;
 using System.Text;
 using UnityEngine;
 
-namespace ControllerAutoAdjust
+namespace ReplayFit
 {
     /// <summary>
     /// Records, per scored cut, the five numbers an offset can act on.

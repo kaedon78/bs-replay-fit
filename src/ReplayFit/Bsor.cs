@@ -4,7 +4,7 @@ using System.IO;
 using System.Text;
 using UnityEngine;
 
-namespace ControllerAutoAdjust
+namespace ReplayFit
 {
     /// <summary>
     /// Reads BeatLeader's local replay files.

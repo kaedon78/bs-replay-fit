@@ -3,7 +3,7 @@ using System.Reflection;
 using UnityEngine;
 using UnityEngine.XR;
 
-namespace ControllerAutoAdjust
+namespace ReplayFit
 {
     /// <summary>
     /// Logs what the game actually does with the controller offset settings.

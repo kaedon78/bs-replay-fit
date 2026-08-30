@@ -4,7 +4,7 @@ using System.Reflection;
 using UnityEngine;
 using UnityEngine.XR;
 
-namespace ControllerAutoAdjust
+namespace ReplayFit
 {
     /// <summary>What the controller offset settings are, and what the game makes of them.</summary>
     /// <remarks>

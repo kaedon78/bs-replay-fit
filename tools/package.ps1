@@ -9,7 +9,7 @@ $root = Split-Path -Parent $PSScriptRoot
 & (Join-Path $PSScriptRoot 'build-all.ps1')
 if ($LASTEXITCODE -ne 0) { throw 'build failed' }
 
-$manifest = Get-Content (Join-Path $root 'src\ControllerAutoAdjust\manifest.json') -Raw | ConvertFrom-Json
+$manifest = Get-Content (Join-Path $root 'src\ReplayFit\manifest.json') -Raw | ConvertFrom-Json
 $version = $manifest.version
 $out = Join-Path $root 'dist\packages'
 New-Item -ItemType Directory -Force $out | Out-Null
@@ -19,10 +19,10 @@ foreach ($game in @('1.40.5', '1.45.0')) {
     if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
     New-Item -ItemType Directory -Force (Join-Path $stage 'Plugins') | Out-Null
 
-    Copy-Item (Join-Path $root "dist\$game\ControllerAutoAdjust.dll") (Join-Path $stage 'Plugins')
-    Copy-Item (Join-Path $root 'README.md') (Join-Path $stage 'ControllerAutoAdjust-README.md')
+    Copy-Item (Join-Path $root "dist\$game\ReplayFit.dll") (Join-Path $stage 'Plugins')
+    Copy-Item (Join-Path $root 'README.md') (Join-Path $stage 'ReplayFit-README.md')
 
-    $zip = Join-Path $out "ControllerAutoAdjust-$version-bs$game.zip"
+    $zip = Join-Path $out "ReplayFit-$version-bs$game.zip"
     if (Test-Path $zip) { Remove-Item $zip }
     Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip
     Remove-Item -Recurse -Force $stage

@@ -1,4 +1,4 @@
-# Controller Auto Adjust
+# ReplayFit
 
 Beat Saber scores every note out of 115: 70 for winding up far enough, 30 for following
 through, and 15 for how close to the note's centre your blade passed. The first two come
@@ -47,8 +47,8 @@ anything — below that it shows what it found but refuses to advise on it.
 
 ## Installing
 
-Extract the zip into your Beat Saber folder so that `ControllerAutoAdjust.dll` lands in
-`Plugins`. Start the game once, then find **Controller Auto Adjust** under Mod Settings.
+Extract the zip into your Beat Saber folder so that `ReplayFit.dll` lands in
+`Plugins`. Start the game once, then find **ReplayFit** under Mod Settings.
 
 ## Using it
 
@@ -100,7 +100,7 @@ produces is a controller configuration you could have typed in yourself.
 
 ## Where its data lives
 
-`UserData/ControllerAutoAdjust/`:
+`UserData/ReplayFit/`:
 
 | file | what it is |
 |---|---|
@@ -130,5 +130,5 @@ gave it.
 ## If something goes wrong
 
 The log is `Logs/_latest.log` in your Beat Saber folder, and every line from this mod is
-tagged `ControllerAutoAdjust`. That log is the most useful thing you can attach to a bug
+tagged `ReplayFit`. That log is the most useful thing you can attach to a bug
 report.

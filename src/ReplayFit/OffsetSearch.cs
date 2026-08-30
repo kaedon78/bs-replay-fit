@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace ControllerAutoAdjust
+namespace ReplayFit
 {
     /// <summary>One scored cut, reduced to what an offset can act on.</summary>
     internal struct CutSample

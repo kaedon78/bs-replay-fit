@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <AssemblyName>ControllerAutoAdjust</AssemblyName>
-    <RootNamespace>ControllerAutoAdjust</RootNamespace>
+    <AssemblyName>ReplayFit</AssemblyName>
+    <RootNamespace>ReplayFit</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>

@@ -1,4 +1,4 @@
-# ControllerAutoAdjust
+# ReplayFit
 
 A Beat Saber mod that watches where your sabers actually cut and suggests a controller
 offset that lands them closer to the centre of the note.
@@ -293,7 +293,7 @@ gitignored `Directory.Build.user.props`:
 ```
 
 ```bash
-dotnet build -c Release src/ControllerAutoAdjust/ControllerAutoAdjust.csproj
+dotnet build -c Release src/ReplayFit/ReplayFit.csproj
 ```
 
 The manifest is an embedded resource; BSIPA finds plugin metadata that way and skips the

@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace ControllerAutoAdjust
+namespace ReplayFit
 {
     /// <summary>
     /// The settings screen's numbers, translated into the rotation the saber actually gets.

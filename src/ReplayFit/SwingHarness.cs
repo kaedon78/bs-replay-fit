@@ -3,7 +3,7 @@ using System.IO;
 using System.Linq;
 using UnityEngine;
 
-namespace ControllerAutoAdjust
+namespace ReplayFit
 {
     /// <summary>
     /// Drives the sabers along a scripted sweep so cuts happen without a headset.
@@ -26,7 +26,7 @@ namespace ControllerAutoAdjust
     /// whatever about how a person swings, so no fit, threshold or recommendation may ever be
     /// drawn from them.
     ///
-    /// Off unless <c>UserData/ControllerAutoAdjust/synthetic-swings.on</c> exists.
+    /// Off unless <c>UserData/ReplayFit/synthetic-swings.on</c> exists.
     /// </remarks>
     internal class SwingHarness : MonoBehaviour
     {

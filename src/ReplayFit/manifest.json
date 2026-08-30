@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/bsmg/BSIPA-MetadataFileSchemas/master/Schemas/BSIPA/plugin.schema.json",
-  "id": "ControllerAutoAdjust",
-  "name": "ControllerAutoAdjust",
+  "id": "ReplayFit",
+  "name": "ReplayFit",
   "author": "Kaedon",
   "version": "0.2.0",
   "description": "Measures where your sabers actually cut and suggests a controller offset that lands them closer to centre.",

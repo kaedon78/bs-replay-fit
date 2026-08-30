@@ -9,7 +9,7 @@ using BeatSaberMarkupLanguage.Settings;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace ControllerAutoAdjust
+namespace ReplayFit
 {
     /// <summary>
     /// The one question only the player can answer, and what the replays say about it.
@@ -57,8 +57,8 @@ namespace ControllerAutoAdjust
             }
         }
 
-        internal const string MenuName = "Controller Auto Adjust";
-        internal const string Resource = "ControllerAutoAdjust.Views.settings.bsml";
+        internal const string MenuName = "ReplayFit";
+        internal const string Resource = "ReplayFit.Views.settings.bsml";
 
         private const string CurrentSettings = "As they are now";
 

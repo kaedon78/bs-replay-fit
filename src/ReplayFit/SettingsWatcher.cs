@@ -5,7 +5,7 @@ using System.Reflection;
 using BeatSaber.GameSettings;
 using UnityEngine;
 
-namespace ControllerAutoAdjust
+namespace ReplayFit
 {
     /// <summary>
     /// Notices when the controller offsets change, and journals the new ones.

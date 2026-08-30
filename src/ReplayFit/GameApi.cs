@@ -3,7 +3,7 @@ using System.Reflection;
 using BeatSaber.GameSettings;
 using UnityEngine;
 
-namespace ControllerAutoAdjust
+namespace ReplayFit
 {
     /// <summary>
     /// The few places the game's surface differs across the versions this mod supports.
