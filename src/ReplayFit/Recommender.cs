@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -32,22 +33,18 @@ namespace ReplayFit
         private const int MinCutsPerHand = 100;
 
         /// <summary>
-        /// How many usable runs to gather before stopping, newest first.
+        /// How many replays one pass will reduce that it has not reduced before.
         /// </summary>
         /// <remarks>
-        /// Counted in runs that survive filtering rather than files opened. Four hundred files
-        /// gave 217 usable here, and a library heavier in One Saber or short runs would give
-        /// far fewer -- so a file cap bounds the cost without bounding the evidence.
+        /// A budget on the expensive half, not a cap on how far back the read reaches. A
+        /// cached replay costs a file stat and a dictionary lookup, so the walk covers the
+        /// whole library every time; only parsing is rationed.
         ///
-        /// Newest first is not only about cost. The residual drifts one to two degrees a
-        /// month, so older sessions describe a grip the player has partly moved on from, and
-        /// the fit stops improving well before a full library is read: the offline sweep
-        /// settled by around 273 runs.
+        /// The effect is that a large library reduces itself over several visits rather than
+        /// stalling one. Newest first, so the runs that matter most to the current grip are
+        /// the ones reduced first, and each later pass reaches further back.
         /// </remarks>
-        private const int TargetUsableRuns = 300;
-
-        /// <summary>A ceiling on files opened, so an enormous library cannot stall the read.</summary>
-        private const int MaxFilesToOpen = 1200;
+        private const int MaxNewReductions = 1200;
 
         /// <summary>
         /// Runs needed before a group's answer is offered rather than merely reported.
@@ -88,17 +85,82 @@ namespace ReplayFit
         internal static bool HasRead => _read.Count > 0;
 
         /// <summary>How many runs an assignment actually covers, for showing next to it.</summary>
-        internal static int RunsCoveredBy(Preferences.Assignment a)
+        private static readonly DateTime Epoch =
+            new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        /// <summary>Bounds a timestamp has to fall inside to be believed, as unix seconds.</summary>
+        /// <remarks>
+        /// Wide on purpose. This is here to reject a field that is not seconds at all -- a
+        /// zero, or a millisecond value, which is 1000x too large and would otherwise read as
+        /// a date sixty thousand years out -- not to second-guess a plausible date.
+        /// </remarks>
+        private const long EarliestPlausible = 1200000000;  // 2008, before the game existed
+        private const long LatestPlausible = 4100000000;    // 2100
+
+        /// <summary>
+        /// When a run was actually played, taken from the replay's own header.
+        /// </summary>
+        /// <remarks>
+        /// Not the file's write time. That is only a proxy for when it was played, and a
+        /// fragile one: anything that rewrites a .bsor -- a BeatLeader re-sync, a restored
+        /// backup, a copied install -- moves it to the present. The run's date then jumps
+        /// with it and silently leaves whatever range the player assigned it to, while the
+        /// assignment itself still reads perfectly plausibly on screen.
+        ///
+        /// The header is written once, by the game, and never moves again.
+        ///
+        /// The write time stays as the fallback, because a header this reader cannot make
+        /// sense of is not a reason to throw away an otherwise good run. Measured across the
+        /// 4998 replays this was developed against, nothing needed it: every one carried a
+        /// valid timestamp, within about a minute of its write time.
+        /// </remarks>
+        private static DateTime PlayedAt(Bsor.Info info, string file)
         {
-            var count = 0;
+            if (long.TryParse(info.Timestamp, NumberStyles.None,
+                              CultureInfo.InvariantCulture, out var seconds)
+                && seconds > EarliestPlausible && seconds < LatestPlausible)
+            {
+                return Epoch.AddSeconds(seconds);
+            }
+            return File.GetLastWriteTimeUtc(file);
+        }
+
+        /// <summary>What a range holds, and how much of it the range actually governs.</summary>
+        /// <remarks>
+        /// Two numbers rather than one, because they fail differently and the difference is
+        /// the whole message. A range holding nothing is a mistake -- wrong dates, or a
+        /// history that was never read. A range whose runs the journal already speaks for is
+        /// not a mistake at all: it is simply redundant, because the journal recorded those
+        /// settings at the time and recorded fact outranks anything assigned after the event.
+        ///
+        /// Reported as one number they are indistinguishable, and both read as "0 runs" --
+        /// which sends a player back to re-check dates that were right all along.
+        /// </remarks>
+        internal struct Coverage
+        {
+            /// <summary>Runs whose date falls inside the range.</summary>
+            public int Covered;
+
+            /// <summary>Of those, the ones the journal does not already account for.</summary>
+            public int Governed;
+        }
+
+        internal static Coverage RunsCoveredBy(Preferences.Assignment a)
+        {
+            var coverage = new Coverage();
             foreach (var run in _read)
             {
-                if (!run.FromJournal && a.Covers(run.Played))
+                if (!a.Covers(run.Played))
                 {
-                    count++;
+                    continue;
+                }
+                coverage.Covered++;
+                if (!run.FromJournal)
+                {
+                    coverage.Governed++;
                 }
             }
-            return count;
+            return coverage;
         }
 
         /// <summary>Step one: read the replays. Slow, and only needed once.</summary>
@@ -167,6 +229,14 @@ namespace ReplayFit
             void Drop(string reason) =>
                 why[reason] = why.TryGetValue(reason, out var n) ? n + 1 : 1;
 
+            // Counted and remembered. The count is for this pass's summary; the cache entry
+            // is so the next pass spends its parsing budget on files nothing has read yet.
+            void Reject(string file, long written, string reason)
+            {
+                Drop(reason);
+                keep[file] = new CutCache.Entry { WrittenTicks = written, Cuts = null };
+            }
+
             var speeds = new List<float>();
             var residuals = new List<float>();
 
@@ -175,18 +245,20 @@ namespace ReplayFit
             // a process that sits above 3 GB for reasons entirely its own.
             var scratch = new Bsor.Scratch();
             var seen = 0;
+            var reduced = 0;
 
+            // The whole library, every pass. An assignment exists to speak for history the
+            // journal cannot, so a read that stops after the newest few hundred runs leaves
+            // the player naming ranges over replays it will never look at -- the range then
+            // reads plausibly and covers nothing, which is indistinguishable from having got
+            // the dates wrong.
             foreach (var file in files)
             {
-                if (found.Count >= TargetUsableRuns || seen >= MaxFilesToOpen)
-                {
-                    break;
-                }
                 if (++seen % 25 == 0)
                 {
-                    Advice.Summary = $"Reading replays... {found.Count} of {TargetUsableRuns}"
+                    Advice.Summary = $"Reading replays... {found.Count} usable"
                                      + (reused > 0 ? $" ({reused} cached)" : "");
-                    Advice.Progress = (float)found.Count / TargetUsableRuns;
+                    Advice.Progress = (float)seen / files.Count;
                     Advice.Publish();
                 }
 
@@ -197,10 +269,21 @@ namespace ReplayFit
                 if (cache.TryGetValue(file, out var cached) && cached.WrittenTicks == written)
                 {
                     keep[file] = cached;
-                    found.Add(cached.Cuts);
-                    reused++;
+                    if (cached.Usable)
+                    {
+                        found.Add(cached.Cuts);
+                        reused++;
+                    }
                     continue;
                 }
+
+                // Not reduced before, and this pass has already done its share. Left alone
+                // rather than dropped: the next pass starts here instead of starting over.
+                if (reduced >= MaxNewReductions)
+                {
+                    continue;
+                }
+                reduced++;
 
                 Bsor.Replay replay;
                 try
@@ -211,18 +294,18 @@ namespace ReplayFit
                 {
                     // Roughly a tenth of a live install's replays do not parse; a partially
                     // written one is unremarkable.
-                    Drop("unreadable");
+                    Reject(file, written, "unreadable");
                     continue;
                 }
 
                 if (replay.Info.Mode != "Standard")
                 {
-                    Drop($"not Standard ({replay.Info.Mode})");
+                    Reject(file, written, $"not Standard ({replay.Info.Mode})");
                     continue;
                 }
                 if (!replay.Info.Clean)
                 {
-                    Drop("speed or practice modifier");
+                    Reject(file, written, "speed or practice modifier");
                     continue;
                 }
 
@@ -234,13 +317,13 @@ namespace ReplayFit
                 if (cuts.Left.Cuts == null || cuts.Left.Cuts.Count == 0
                     || cuts.Right.Cuts == null || cuts.Right.Cuts.Count == 0)
                 {
-                    Drop($"under {MinCutsPerHand} cuts a hand");
+                    Reject(file, written, $"under {MinCutsPerHand} cuts a hand");
                     continue;
                 }
 
                 // The journal is fact and is resolved now. Anything it does not cover depends
                 // on the profile the player names, which is step two, so it waits for the fit.
-                cuts.Played = File.GetLastWriteTimeUtc(file);
+                cuts.Played = PlayedAt(replay.Info, file);
                 found.Add(cuts);
                 keep[file] = new CutCache.Entry { WrittenTicks = written, Cuts = cuts };
                 speeds.Add(cuts.Left.NoteSpeed);
@@ -453,6 +536,43 @@ namespace ReplayFit
             // and a run of 206 sessions beside one of 11 is not two equal halves. Split
             // evenly, the bar sat at 50% for almost the whole fit and then finished instantly.
             var ordered = groups.OrderByDescending(g => g.Runs.Count).ToList();
+
+            // Which group is allowed to advise is a separate question from the order they
+            // are worked through, and it is neither the biggest nor whichever matches the
+            // settings currently in force.
+            //
+            // Not the biggest: the read reaches back over a whole history, so that is
+            // whichever grip was held longest, easily one abandoned months ago.
+            //
+            // Not the live settings either, which is what this tried first and got wrong.
+            // Changing the settings starts a new group at zero runs, so the moment a player
+            // acts on advice -- or simply nudges a slider -- the group matching their
+            // settings is the one with almost nothing in it, and the fit falls silent while
+            // three hundred runs sit in groups it will not read from.
+            //
+            // Most recent of the groups big enough to trust. A group's answer is absolute:
+            // it recovers the grip, and applying its correction to the settings it was played
+            // on lands on that same grip whoever asks. So any trusted group can be acted on,
+            // and the only thing separating them is age -- the residual drifts a degree or two
+            // a month, so the newest trustworthy group describes the grip closest to today's.
+            var advisable = -1;
+            var newest = DateTime.MinValue;
+            for (var i = 0; i < ordered.Count; i++)
+            {
+                if (ordered[i].Runs.Count < MinRunsToRecommend)
+                {
+                    continue;
+                }
+                foreach (var run in ordered[i].Runs)
+                {
+                    if (run.Played > newest)
+                    {
+                        newest = run.Played;
+                        advisable = i;
+                    }
+                }
+            }
+
             var totalCuts = 0L;
             foreach (var group in ordered)
             {
@@ -460,8 +580,9 @@ namespace ReplayFit
             }
             var soFar = 0L;
 
-            foreach (var group in ordered)
+            for (var index = 0; index < ordered.Count; index++)
             {
+                var group = ordered[index];
                 var leftCuts = group.Runs.SelectMany(r => r.Left.Cuts).ToList();
                 var rightCuts = group.Runs.SelectMany(r => r.Right.Cuts).ToList();
                 var trusted = group.Runs.Count >= MinRunsToRecommend;
@@ -470,7 +591,7 @@ namespace ReplayFit
                     + $"{group.Epoch.RightRotation}: {group.Runs.Count} runs"
                     + (trusted ? "" : $" (under {MinRunsToRecommend}: shown, not recommended)"));
 
-                var show = trusted && !advised;
+                var show = trusted && !advised && index == advisable;
                 var scale = totalCuts > 0 ? 1f / totalCuts : 0f;
                 var leftFrom = soFar * scale;
                 var leftSpan = leftCuts.Count * scale;

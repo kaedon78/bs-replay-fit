@@ -48,15 +48,37 @@ namespace ReplayFit
         /// Version 4: that moment arm put back. The plane rotates about the grip and the note
         /// is what is being measured from it, so the arm is the note's position and is not
         /// bounded by the sabre's length. Version 3 was a fix for a problem that was not one.
+        ///
+        /// Version 5: two changes at once, both to what an entry means. When a run was
+        /// played is read from the replay header rather than from the file's write time, so
+        /// every stored date from version 4 is suspect and none can be kept. And a rejected
+        /// file is remembered as rejected, rather than being forgotten and parsed again on
+        /// every pass.
         /// </remarks>
-        private const int Version = 4;
+        private const int Version = 5;
 
         private static string Path => System.IO.Path.Combine(Paths.DataDir, FileName);
 
+        /// <summary>
+        /// One replay, reduced -- or a note that it was looked at and is not usable.
+        /// </summary>
+        /// <remarks>
+        /// A rejection is worth remembering as much as a reduction. Roughly half a real
+        /// library is One Saber, too short, modified or simply unreadable, and none of that
+        /// changes between passes. Forgotten, those files are parsed again on every read --
+        /// and since parsing is rationed, they would spend the whole budget being rejected a
+        /// second time while replays nothing has looked at yet wait behind them.
+        ///
+        /// <see cref="Cuts"/> is null for one of these. The reason is not kept: it is only
+        /// ever reported as a count, and the counts are rebuilt from the files still being
+        /// parsed each pass.
+        /// </remarks>
         internal struct Entry
         {
             public long WrittenTicks;
             public ReplayCuts.Extraction Cuts;
+
+            public bool Usable => Cuts != null;
         }
 
         internal static Dictionary<string, Entry> Load()
@@ -80,18 +102,21 @@ namespace ReplayFit
                     for (var i = 0; i < count; i++)
                     {
                         var file = r.ReadString();
-                        var entry = new Entry
+                        var ticks = r.ReadInt64();
+                        var usable = r.ReadBoolean();
+                        found[file] = new Entry
                         {
-                            WrittenTicks = r.ReadInt64(),
-                            Cuts = new ReplayCuts.Extraction
-                            {
-                                Played = new DateTime(r.ReadInt64(), DateTimeKind.Utc),
-                                Song = r.ReadString(),
-                                Left = ReadHand(r),
-                                Right = ReadHand(r),
-                            },
+                            WrittenTicks = ticks,
+                            Cuts = usable
+                                ? new ReplayCuts.Extraction
+                                {
+                                    Played = new DateTime(r.ReadInt64(), DateTimeKind.Utc),
+                                    Song = r.ReadString(),
+                                    Left = ReadHand(r),
+                                    Right = ReadHand(r),
+                                }
+                                : null,
                         };
-                        found[file] = entry;
                     }
                 }
                 Plugin.Log.Info($"cut cache: {found.Count} replays already reduced");
@@ -120,6 +145,11 @@ namespace ReplayFit
                     {
                         w.Write(pair.Key);
                         w.Write(pair.Value.WrittenTicks);
+                        w.Write(pair.Value.Usable);
+                        if (!pair.Value.Usable)
+                        {
+                            continue;
+                        }
                         w.Write(pair.Value.Cuts.Played.Ticks);
                         w.Write(pair.Value.Cuts.Song ?? "");
                         WriteHand(w, pair.Value.Cuts.Left);

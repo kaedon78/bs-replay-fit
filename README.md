@@ -57,9 +57,11 @@ Extract the zip into your Beat Saber folder so that `ReplayFit.dll` lands in
 
 The panel is four numbered steps, top to bottom.
 
-**1. Read replays.** Parses your replay files. Slow the first time — a minute or so for a
-large library — and near-instant afterwards, because the reduced form is cached. Nothing
-happens until you press it; the mod never reads on startup.
+**1. Read replays.** Parses your replay files. Slow the first time and near-instant
+afterwards, because the reduced form is cached. A very large library is reduced a chunk at a
+time rather than in one sitting, so the first few reads each do a share of the work and get
+quicker as the cache fills; every replay is covered in the end, however far back it goes.
+Nothing happens until you press it; the mod never reads on startup.
 
 **2. Tell it which settings your old replays were played on.** A replay does not record the
 controller offsets it was played with, and nothing in the file can recover them. From the
@@ -67,7 +69,10 @@ moment you install this mod it keeps its own record, but everything before that 
 answer. Set the date range with the two sliders, pick the controller profile you were using,
 and press **Assign range**. If you changed your grip partway through your history, assign
 each stretch separately — the list shows how many runs each range actually covers, so you
-can check a range holds what you meant before fitting on it.
+can check a range holds what you meant before fitting on it. A range over play the mod
+already recorded at the time says *already recorded* rather than a count: it is harmless, but
+it is doing nothing, because what was recorded as you played outranks anything assigned
+afterwards.
 
 Runs that no range covers are left out of the fit entirely. Guessing at them would mix cuts
 from an unknown grip into a group that claims to know its own, which is the one error worth

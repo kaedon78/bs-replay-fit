@@ -398,7 +398,7 @@ namespace ReplayFit
                 return "no replays yet";
             }
             var span = sessions[SessionAt(percent)];
-            return $"{span.Start:d MMM HH:mm} ({span.Runs})";
+            return $"{Shown.At(span.Start):d MMM HH:mm} ({span.Runs})";
         }
 
         /// <summary>
@@ -530,7 +530,7 @@ namespace ReplayFit
                 RightRotation = right,
                 AlternativeHandling = alternative,
             });
-            Advice.Note = $"Assigned {from:d MMM HH:mm} to {to:d MMM HH:mm}.";
+            Advice.Note = $"Assigned {Shown.At(from):d MMM HH:mm} to {Shown.At(to):d MMM HH:mm}.";
             Advice.Publish();
         }
 
@@ -555,7 +555,7 @@ namespace ReplayFit
             }
             var last = list[list.Count - 1];
             Preferences.RemoveAssignment(last);
-            Advice.Note = $"Removed {last.From:d MMM HH:mm} to {last.To:d MMM HH:mm}.";
+            Advice.Note = $"Removed {Shown.At(last.From):d MMM HH:mm} to {Shown.At(last.To):d MMM HH:mm}.";
             Advice.Publish();
         }
 
@@ -723,10 +723,13 @@ namespace ReplayFit
         private string BuildAssignmentList()
         {
             var list = Preferences.Assignments;
+            var coverage = new List<Recommender.Coverage>(list.Count);
             _assignedRuns = 0;
             foreach (var a in list)
             {
-                _assignedRuns += Recommender.RunsCoveredBy(a);
+                var covers = Recommender.RunsCoveredBy(a);
+                coverage.Add(covers);
+                _assignedRuns += covers.Governed;
             }
             if (!Recommender.HasRead)
             {
@@ -743,12 +746,24 @@ namespace ReplayFit
             // Each line carries how many runs it actually covers. A range that reads
             // plausibly and holds nothing is the failure worth catching here: the dates
             // look right, and the fit quietly has less than it appears to.
+            //
+            // A range the journal already covers is called out separately rather than shown
+            // as empty. It is doing nothing, but it is doing nothing for a good reason -- the
+            // settings behind those runs were recorded as they were played -- and telling a
+            // player that reads as a broken range sends them to re-check dates that are right.
             var lines = new List<string>();
-            foreach (var a in list)
+            for (var i = 0; i < list.Count; i++)
             {
-                lines.Add($"{a.From:d MMM HH:mm} - {a.To:d MMM HH:mm}  "
+                var a = list[i];
+                var covers = coverage[i];
+                var held = covers.Governed > 0
+                    ? $"{covers.Governed} runs"
+                    : covers.Covered > 0
+                        ? $"{covers.Covered} already recorded"
+                        : "no runs";
+                lines.Add($"{Shown.At(a.From):d MMM HH:mm} - {Shown.At(a.To):d MMM HH:mm}  "
                           + $"L {Short(a.LeftRotation)} R {Short(a.RightRotation)}  "
-                          + $"[{Recommender.RunsCoveredBy(a)} runs]");
+                          + $"[{held}]");
             }
             return string.Join("\n", lines);
         }
@@ -1248,8 +1263,8 @@ namespace ReplayFit
                     runs += sitting.Runs;
                 }
                 return $"<mspace=2>{new string(bar)}</mspace>\n"
-                       + $"{runs} runs from {first:MMM d} to "
-                       + $"{sessions[sessions.Count - 1].Start:MMM d}";
+                       + $"{runs} runs from {Shown.At(first):MMM d} to "
+                       + $"{Shown.At(sessions[sessions.Count - 1].Start):MMM d}";
             }
         }
 
