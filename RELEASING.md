@@ -57,7 +57,8 @@ Do not renumber a fork to fit this convention.
 
 The same skeleton in each mod, so a reader who knows one knows the others:
 
-1. **Title**, one-line description, supported game version
+1. **Title**, then the latest-release and License badges, both linked, then a one-line
+   description
 2. *(mod-specific explanation, where the mod needs one)*
 3. **Requirements** -- game version, BSIPA, any mod dependencies
 4. **Installing** -- where the DLL goes
@@ -71,8 +72,8 @@ The same skeleton in each mod, so a reader who knows one knows the others:
 
 Three rules that are easy to drift back into:
 
-* **State the supported game version once.** If a badge carries it, do not repeat it in prose; if
-  there is no badge, it is a line in Requirements.
+* **State the supported game version once, in Requirements.** Never as a badge: it varies by
+  branch and by tag, so a static one goes stale silently and a dynamic one cannot know it.
 * **Requirements lists what is needed, not what is not.** "No FinalIK, no asset bundles" tells a
   reader nothing they can act on.
 * **Known limits are limits that are true**, verified in this mod. Not things merely untested, and
