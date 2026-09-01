@@ -9,3 +9,6 @@ __pycache__/
 
 # Per-version plugin builds; produced by tools/build-all.ps1.
 dist/
+
+# Crash debris from Windows shell tooling; never part of a build.
+*.stackdump
