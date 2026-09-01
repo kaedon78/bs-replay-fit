@@ -124,6 +124,12 @@ history too.
 Deleting any of these is safe. The cache rebuilds, and the other two only lose answers you
 gave it.
 
+## If something goes wrong
+
+The log is `Logs/_latest.log` in your Beat Saber folder, and every line from this mod is
+tagged `ReplayFit`. That log is the most useful thing you can attach to a bug
+report.
+
 ## Known limits
 
 - **One Saber, speed and practice modifiers are excluded.** They change the geometry or the
@@ -135,11 +141,19 @@ gave it.
   30 seconds rather than immediately. That version has no event to hook. It makes no
   difference unless you change settings and start a map inside the same half-minute.
 
-## If something goes wrong
+## Building
 
-The log is `Logs/_latest.log` in your Beat Saber folder, and every line from this mod is
-tagged `ReplayFit`. That log is the most useful thing you can attach to a bug
-report.
+No game binary is committed here, and none should be: Beat Saber's assemblies are not
+redistributable. The build reads them from an install you already have.
+
+```powershell
+dotnet build -c Release -p:BeatSaberDir="C:\Path\To\Beat Saber"
+```
+
+## Releasing
+
+Tag and branch naming is documented in [RELEASING.md](RELEASING.md), and is shared with the other
+Beat Saber mods alongside this one.
 
 ## License
 
