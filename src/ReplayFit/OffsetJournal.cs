@@ -56,6 +56,7 @@ namespace ReplayFit
                 if (entries.Count > 0)
                 {
                     var last = entries[entries.Count - 1];
+                    reading = Inherit(last, reading);
                     if (Same(last, reading))
                     {
                         return;
@@ -124,6 +125,46 @@ namespace ReplayFit
             return Mathf.Abs(a.x - b.x) <= tolerance
                 && Mathf.Abs(a.y - b.y) <= tolerance
                 && Mathf.Abs(a.z - b.z) <= tolerance;
+        }
+
+        /// <summary>
+        /// Keep the last legacy offset when this read could not determine one.
+        /// </summary>
+        /// <remarks>
+        /// The legacy offset is the game's own per-hardware compensation, not anything the
+        /// player sets: a Valve Index contributes -16.3 degrees of X, and asking for it
+        /// fails while the controllers are asleep. A failed lookup was being written down as
+        /// a measured zero, which is the error this codebase avoids everywhere else -- a
+        /// reading that could not be taken is not a reading of nothing.
+        ///
+        /// Measured on the developing player: of seventy-seven entries, thirty-one recorded
+        /// a zero the helper had refused to vouch for, and every one of them was a spurious
+        /// epoch for a setting that had not changed. None of them caught a run, which is luck
+        /// -- the offset is more than the whole correction being searched for, so a run
+        /// attributed to a false zero would be fitted in a frame sixteen degrees out.
+        ///
+        /// Inheriting rather than skipping the entry, so a genuine change to the typed
+        /// numbers during a bad read is still recorded. The value carried forward is the last
+        /// one actually measured on this hardware, which is the best estimate available and a
+        /// great deal better than a zero nobody observed.
+        /// </remarks>
+        private static OffsetState.Reading Inherit(Epoch last, OffsetState.Reading now)
+        {
+            // A deviceless helper reports a valid zero, and means nothing by it: with no
+            // device present it returns zeros whatever the hardware would have said. Reading
+            // it as a measurement writes a false epoch into the journal every time the game
+            // is started without a headset, which is every development launch.
+            var measured = now.LegacyValid
+                           && now.PlatformHelper != "DevicelessVRHelper";
+            if (measured || !last.LegacyValid)
+            {
+                return now;
+            }
+            // Rotation only: the journal has never carried the legacy position, and the fit
+            // never asks for it.
+            now.LegacyRotation = last.LegacyRotation;
+            now.LegacyValid = true;
+            return now;
         }
 
         private static bool Same(Epoch e, OffsetState.Reading r)

@@ -367,11 +367,27 @@ namespace ReplayFit
                 return "";
             }
 
-            var newest = 0;
-            for (var i = epochs.Count - 1; i >= 0; i--)
+            // Consecutive entries describing the same grip are one setting, not several. The
+            // journal gains an entry whenever the platform helper changes its mind about the
+            // legacy offset -- it reports the Index's -16.3 when the controllers are awake
+            // and nothing when they are not -- so a fortnight on one setting can be a dozen
+            // entries. Walking them raw found the newest with ten runs behind it and reported
+            // on that, when forty-seven runs of the same grip sat directly above it.
+            var starts = new List<int>();
+            for (var i = 0; i < epochs.Count; i++)
             {
+                if (i == 0 || !SameSetting(epochs[i - 1], epochs[i]))
+                {
+                    starts.Add(i);
+                }
+            }
+
+            var newest = 0;
+            for (var s = starts.Count - 1; s >= 0; s--)
+            {
+                var i = starts[s];
                 var from = epochs[i].From;
-                var to = i + 1 < epochs.Count ? epochs[i + 1].From : DateTime.MaxValue;
+                var to = s + 1 < starts.Count ? epochs[starts[s + 1]].From : DateTime.MaxValue;
                 var during = new List<ReplayCuts.Extraction>();
                 foreach (var run in runs)
                 {
@@ -380,7 +396,7 @@ namespace ReplayFit
                         during.Add(run);
                     }
                 }
-                if (i == epochs.Count - 1)
+                if (s == starts.Count - 1)
                 {
                     newest = during.Count;
                 }
@@ -398,7 +414,7 @@ namespace ReplayFit
                 // runs on the settings from 5 Sep: left wants 2.1 degrees more", which reads
                 // as a correction still outstanding when it is a fact about settings the
                 // player has already moved on from. Past tense, and the change said plainly.
-                var current = i == epochs.Count - 1;
+                var current = s == starts.Count - 1;
                 var line = current
                     ? $"Your current settings, over {during.Count} runs:"
                     : $"Measured on the settings from {Shown.At(from):d MMM}, "
@@ -415,6 +431,23 @@ namespace ReplayFit
 
             return $"Only {newest} run(s) on your current settings, and not enough on any "
                    + "earlier one to judge it by.";
+        }
+
+        /// <summary>
+        /// Whether two journal entries describe the same grip a player would recognise.
+        /// </summary>
+        /// <remarks>
+        /// The typed numbers alone, deliberately. What else the entry carries -- which legacy
+        /// offset the platform happened to report that minute -- is not something the player
+        /// changed, and grouping on it splits one setting into a dozen.
+        /// </remarks>
+        private static bool SameSetting(OffsetJournal.Epoch a, OffsetJournal.Epoch b)
+        {
+            return a.LeftRotation == b.LeftRotation
+                && a.RightRotation == b.RightRotation
+                && a.LeftPosition == b.LeftPosition
+                && a.RightPosition == b.RightPosition
+                && a.AlternativeHandling == b.AlternativeHandling;
         }
 
         /// <summary>The turn these cuts are asking for, weighted by the combo multiplier.</summary>
