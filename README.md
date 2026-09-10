@@ -55,7 +55,10 @@ Extract the zip into your Beat Saber folder so that `ReplayFit.dll` lands in
 
 ## Using it
 
-The panel is four numbered steps, top to bottom.
+The panel has three tabs. **Fit** is where the work happens, **Ranges** shows what you have
+told it about your history, and **Progress** says whether any of it helped.
+
+The Fit tab is three numbered steps, top to bottom, with the history controls beneath them.
 
 **1. Read replays.** Parses your replay files. Slow the first time and near-instant
 afterwards, because the reduced form is cached. A very large library is reduced a chunk at a
@@ -63,26 +66,32 @@ time rather than in one sitting, so the first few reads each do a share of the w
 quicker as the cache fills; every replay is covered in the end, however far back it goes.
 Nothing happens until you press it; the mod never reads on startup.
 
-**2. Tell it which settings your old replays were played on.** A replay does not record the
-controller offsets it was played with, and nothing in the file can recover them. From the
-moment you install this mod it keeps its own record, but everything before that needs your
-answer. Set the date range with the two sliders, pick the controller profile you were using,
-and press **Assign range**. If you changed your grip partway through your history, assign
-each stretch separately — the list shows how many runs each range actually covers, so you
-can check a range holds what you meant before fitting on it. A range over play the mod
-already recorded at the time says *already recorded* rather than a count: it is harmless, but
-it is doing nothing, because what was recorded as you played outranks anything assigned
-afterwards.
+**2. Fit both hands.** Fast, so change a range and refit freely.
+
+**3. Apply.** Pick which profile to write into, and press. It writes the fitted rotation,
+keeps the position you already had, switches to that profile, and records the change so
+later replays are tied to the new grip.
+
+**Below those: tell it which settings your old replays were played on.** A replay does not
+record the controller offsets it was played with, and nothing in the file can recover them.
+From the moment you install this mod it keeps its own record, but everything before that
+needs your answer. Set the range with the two sliders, pick the controller profile you were
+using, and press **Assign range**. If you changed your grip partway through your history,
+assign each stretch separately; the start slider then follows the range you just made, so you
+can walk forward through your history a stretch at a time. Ranges may not overlap — assigning
+one that would starts it after the range already covering it, and says so — because a replay
+claimed by two grips at once would be counted under whichever the fit happened to reach
+first.
+
+The **Ranges** tab lists what you have assigned, each line showing the dates, the grip, and
+how many replays it actually holds. That count is worth a glance before fitting: a range can
+easily span months and still pick up far fewer runs than you expected. A range over play the
+mod recorded at the time is harmless but does nothing, because what was recorded as you
+played outranks anything assigned afterwards.
 
 Runs that no range covers are left out of the fit entirely. Guessing at them would mix cuts
 from an unknown grip into a group that claims to know its own, which is the one error worth
 avoiding here.
-
-**3. Fit both hands.** Fast, so change the range and refit freely.
-
-**4. Apply.** Pick which profile to write into, and press. It writes the fitted rotation,
-keeps the position you already had, switches to that profile, and records the change so
-later replays are tied to the new grip.
 
 ## Reading the result
 
@@ -99,6 +108,44 @@ If it says no group has enough runs, either widen the range or play more.
 The change is recorded, so the next fit knows your history has a boundary in it and will not
 average across it. Play 10–20 runs on the new grip and fit again: if the first fit was right,
 the second should ask for a much smaller correction.
+
+## Progress
+
+The Progress tab answers the question the rest of the mod cannot: is any of this working?
+
+It splits your history at the first entry in the mod's own record — the moment it first knew
+what your settings were — and compares how far your cuts landed from the centre of the note
+before and since. The comparison is **paired within each map**: only maps you played on both
+sides of that line are counted, and each is compared against itself. That matters, because
+your average cut distance across a library says more about which maps you happened to play
+than about your grip.
+
+    47 maps played both before and since
+    Replay Fit started recording, 29 Aug 26
+
+    Left  1.6 cm closer (34/47)      Right  1.5 cm closer (31/47)
+
+    About +0.52% accuracy
+
+The bracketed pair is how many of those maps improved. The percentage is what the change is
+worth in scoring terms: the accuracy component of a note is 15 of its 115 points and falls
+off with distance from the centre, so a centimetre is worth a fraction of a percent, not a
+grade. The chart below plots the same measure over time, one column per slice of your
+history, so a change that helped shows as a step rather than a number you have to trust.
+
+Beneath it is where your current settings stand — what the cuts played on them are still
+asking for, in degrees. Small numbers there mean the fit has converged and there is little
+left to win.
+
+**One caveat worth stating plainly.** Later runs are also more practised runs. Pairing within
+a map controls for which maps you played, not for the fact that you have played them more by
+the time the second half comes around. Some of any improvement shown here is you getting
+better at the game rather than the mod getting your grip right. Treat it as evidence, not as
+a measurement — and note that if the number is flat or negative, that reading is the more
+trustworthy one, since practice would have pushed it the other way.
+
+The tab needs replays read first, and stays quiet until there is enough on both sides of the
+split to say anything: at least five maps in common, and a few hundred cuts in each era.
 
 ## Fair play
 

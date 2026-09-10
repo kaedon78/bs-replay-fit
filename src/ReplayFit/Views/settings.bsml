@@ -17,14 +17,14 @@
            Height for two lines and then some: a text overflowing its box is centred on the box,
            so it spills equally above and below, and the half above the first row is outside the
            scroll viewport entirely. There is no scrolling up to reach it. -->
-      <horizontal id='status-row' pref-height='6' pref-width='90'>
-        <text text='~status' align='Center' font-size='3.2'/>
+      <horizontal id='status-row' pref-height='5' pref-width='90'>
+        <text text='~status' align='Center' font-size='3.0'/>
       </horizontal>
 
       <!-- Monospaced, so the bars sit under one another rather than drifting with glyph width,
            and at a cell narrow enough that the row can afford enough bars to show the shape of
            a history rather than one bar per month. -->
-      <horizontal id='timeline-row' pref-height='8' pref-width='90'>
+      <horizontal id='timeline-row' pref-height='6' pref-width='90'>
         <text text='~timeline' align='Center' font-size='2.2' rich-text='true'/>
       </horizontal>
 
@@ -35,71 +35,65 @@
                image-color='#4af'/>
       </horizontal>
 
-      <horizontal pref-height='8' pref-width='90'>
+      <horizontal pref-height='7' pref-width='90'>
         <action-button id='read-button' text='~read-button' on-click='read'
                 hover-hint='Reads your replay files. Slow, and only needed once per session.'/>
       </horizontal>
 
-      <!-- Directly over the controls it talks about: the line ends "assigned below". -->
-      <!-- One sitting a row: what it is on the left, which grip it was on in the middle,
-           and the press that records it on the right. A list-setting is a full settings row
-           already shaped this way, its label sits left and its picker right, so the only
-           thing added is the button and a width that leaves room for it. -->
-      <horizontal id='sittings-header' pref-height='9' pref-width='90'>
-        <text text='~sittings-header' align='Center' font-size='2.7'
-              pref-width='86' word-wrapping='true'/>
-      </horizontal>
+      <!-- The steps in the order they are taken: read, say what the old replays were played
+           on, fit, apply. The fit used to sit directly under the read, with the history
+           controls below everything, so the first press after reading was the one that could
+           not work yet, since it needs the ranges that were three screens further down.
 
-      <horizontal id='sitting-0-row' pref-height='7' pref-width='90' spacing='1'>
-        <list-setting id='sitting-0-list' text='~sitting-0' value='sitting-0-profile'
-                      choices='profile-choices' apply-on-change='true' pref-width='72'/>
-        <button text='Add' on-click='sitting-0-add' pref-width='13'
-                hover-hint='Record that sitting as a range on the settings chosen beside it.'/>
-      </horizontal>
-
-      <horizontal id='sitting-1-row' pref-height='7' pref-width='90' spacing='1'>
-        <list-setting id='sitting-1-list' text='~sitting-1' value='sitting-1-profile'
-                      choices='profile-choices' apply-on-change='true' pref-width='72'/>
-        <button text='Add' on-click='sitting-1-add' pref-width='13'
-                hover-hint='Record that sitting as a range on the settings chosen beside it.'/>
-      </horizontal>
-
-      <horizontal id='sitting-2-row' pref-height='7' pref-width='90' spacing='1'>
-        <list-setting id='sitting-2-list' text='~sitting-2' value='sitting-2-profile'
-                      choices='profile-choices' apply-on-change='true' pref-width='72'/>
-        <button text='Add' on-click='sitting-2-add' pref-width='13'
-                hover-hint='Record that sitting as a range on the settings chosen beside it.'/>
-      </horizontal>
-
-      <horizontal id='sitting-3-row' pref-height='7' pref-width='90' spacing='1'>
-        <list-setting id='sitting-3-list' text='~sitting-3' value='sitting-3-profile'
-                      choices='profile-choices' apply-on-change='true' pref-width='72'/>
-        <button text='Add' on-click='sitting-3-add' pref-width='13'
-                hover-hint='Record that sitting as a range on the settings chosen beside it.'/>
-      </horizontal>
-
-      <horizontal id='sitting-4-row' pref-height='7' pref-width='90' spacing='1'>
-        <list-setting id='sitting-4-list' text='~sitting-4' value='sitting-4-profile'
-                      choices='profile-choices' apply-on-change='true' pref-width='72'/>
-        <button text='Add' on-click='sitting-4-add' pref-width='13'
-                hover-hint='Record that sitting as a range on the settings chosen beside it.'/>
-      </horizontal>
-
+           Unnumbered, because the middle of the sequence disappears once the history has been
+           described. Numbers that read 1, 3, 4 to a player who has finished are worse than no
+           numbers at all, and the order down the tab already says what the numbers did. -->
       <horizontal id='needed-row' pref-height='6' pref-width='90'>
-        <text text='~ranges-needed' align='Center' font-size='2.7'
+        <text text='~ranges-needed' align='Center' font-size='2.5'
               pref-width='86' word-wrapping='true'/>
       </horizontal>
 
-      <horizontal pref-height='8' pref-width='90'>
+      <!-- apply-on-change, on both, because these are not preferences: the Assign button
+           below reads them. BSML writes a setting back to its host on the screen's OK event
+           unless told otherwise, so without this the button read the range and profile from
+           before the player set them, and with nothing ever written, it looked inert. -->
+      <slider-setting id='from-slider' text='~from-label' value='start-percent'
+                      min='0' max='100' increment='1' integer-only='true'
+                      formatter='format-session' apply-on-change='true'
+                      hover-hint='Applies only to runs from before this mod was installed. Runs it has a record for are unaffected.'/>
+
+      <!-- Greyed from code: it reports where the range has to end rather than asking. -->
+      <slider-setting id='until-slider' text='~until-label' value='end-percent'
+                      min='0' max='100' increment='1' integer-only='true'
+                      formatter='format-session' apply-on-change='true'
+                      hover-hint='Fixed to the newest replay no range covers yet. Ranges are built backwards from there.'/>
+
+      <list-setting id='profile-list' text='~profile-label' value='profile'
+                    choices='profile-choices' apply-on-change='true'
+                    hover-hint='Which controller profile was in use for that range. Replays do not record it.'/>
+
+      <!-- One button. Removing a range is a press on the range itself over on the Ranges tab,
+           which is where the range is; a pair of blanket buttons that could take the newest or
+           all of them and nothing in between was the only way to reach one before that. -->
+      <horizontal id='assign-row' pref-height='7' pref-width='90'>
+        <action-button id='assign-button' text='Assign Range' on-click='assign'
+                hover-hint='Records the range and profile above as one segment, so several grips can be described.'/>
+      </horizontal>
+
+      <horizontal id='note-row' pref-height='5' pref-width='90'>
+        <text text='~note' align='Center' font-size='2.7'/>
+      </horizontal>
+
+      <horizontal pref-height='7' pref-width='90'>
         <action-button id='fit-button' text='~fit-button' on-click='fit'
-                hover-hint='Fits both hands to the range above. Fast, so change the range and refit freely.'/>
+                hover-hint='Fits both hands to the ranges you have assigned. Fast, so change one and refit freely.'/>
       </horizontal>
 
       <!-- The same pair as at the top, under the button that drives them. A fit's progress
            and the line it leaves behind belong beside the fit, not four rows above it; the two
            are one row apart in the layout and only ever one of them is on screen. -->
       <horizontal id='fit-status-row' pref-height='6' pref-width='90'>
-        <text text='~status' align='Center' font-size='3.2'/>
+        <text text='~status' align='Center' font-size='3.0'/>
       </horizontal>
 
       <horizontal id='fit-progress-row' pref-height='4' pref-width='80' bg='panel-top'>
@@ -107,19 +101,19 @@
                image-color='#4af'/>
       </horizontal>
 
-      <horizontal id='advisory-row' pref-height='9' pref-width='90'>
-        <text text='~advisory' align='Center' font-size='3.2'/>
+      <horizontal id='advisory-row' pref-height='8' pref-width='90'>
+        <text text='~advisory' align='Center' font-size='3.0'/>
       </horizontal>
 
       <!-- Applying is a press, never a consequence of fitting. The fit is cheap and worth
            re-running with a different range; changing the grip out from under a player who was
            only comparing answers is not something they asked for. -->
-      <list-setting id='target-list' text='3. Save the fit to profile' value='target'
+      <list-setting id='target-list' text='Save the fit to profile' value='target'
                     choices='target-choices' apply-on-change='true'
                     hover-hint='Which profile the fitted numbers are written into. It becomes the profile in use.'/>
 
-      <horizontal id='apply-row' pref-height='8' pref-width='90'>
-        <action-button id='apply-button' text='3. Apply and switch to it' on-click='apply'
+      <horizontal id='apply-row' pref-height='7' pref-width='90'>
+        <action-button id='apply-button' text='Apply and switch to it' on-click='apply'
                 hover-hint='Writes the fit into that profile, switches to it, and records the change so later replays are tied to it.'/>
       </horizontal>
 
@@ -134,45 +128,261 @@
         <text text='~evidence' align='Center' font-size='2.9'/>
       </horizontal>
 
-      <!-- The ranges already assigned, above the controls that add another. They are the state
-           the rest of the panel builds on, and below the buttons they were off the bottom of the
-           viewport, so a panel at its resting scroll position said nothing about what had been
-           assigned to it. -->
+      <!-- A tab of its own, holding nothing but the record. The controls that write it sit
+           at the foot of the Fit tab, beside the fit they feed; a list that is also an editor
+           had the ranges scrolled off the top by the three rows that add another.
+
+           Two lists, because the history has two halves that behave differently and looked
+           the same. One is what the player said about the time before the mod existed; the
+           other is what the mod wrote down as they played, which needs nothing from them and
+           cannot be edited. Told apart by a heading rather than by a note underneath, since
+           the question they answer (does this half still want a range?) is asked while
+           looking at the list, not after reading past it. -->
+      <horizontal id='assigned-header-row' pref-height='5' pref-width='90'>
+        <text text='~assigned-header' align='Center' font-size='2.6'
+              pref-width='86' word-wrapping='true'/>
+      </horizontal>
+
+      <!-- One row a range, its own button beside it. A single block of text with two
+           blanket buttons under it could remove the newest or all of them and nothing in
+           between, so correcting the third of five meant deleting two good ones to reach it.
+
+           The button arms on the first press and deletes on the second; the label says which
+           state it is in. Rows past the twelfth fall back to the text below, which is where
+           anything without a button of its own is listed. -->
+      <horizontal id='range-0-row' pref-height='6' pref-width='90' spacing='1'>
+        <text text='~range-0' align='Left' enable-auto-sizing='true'
+              font-size-max='2.6' font-size-min='1.6' word-wrapping='false'
+              pref-width='60'/>
+        <button text='~range-0-use-button' on-click='range-0-use' pref-width='14'
+                hover-hint='Put this range&apos;s controller settings back on. Press once to arm it, again to confirm.'/>
+        <button text='~range-0-button' on-click='range-0-delete' pref-width='12'
+                hover-hint='Remove this range. Press once to arm it, again to confirm.'/>
+      </horizontal>
+
+      <horizontal id='range-1-row' pref-height='6' pref-width='90' spacing='1'>
+        <text text='~range-1' align='Left' enable-auto-sizing='true'
+              font-size-max='2.6' font-size-min='1.6' word-wrapping='false'
+              pref-width='60'/>
+        <button text='~range-1-use-button' on-click='range-1-use' pref-width='14'
+                hover-hint='Put this range&apos;s controller settings back on. Press once to arm it, again to confirm.'/>
+        <button text='~range-1-button' on-click='range-1-delete' pref-width='12'
+                hover-hint='Remove this range. Press once to arm it, again to confirm.'/>
+      </horizontal>
+
+      <horizontal id='range-2-row' pref-height='6' pref-width='90' spacing='1'>
+        <text text='~range-2' align='Left' enable-auto-sizing='true'
+              font-size-max='2.6' font-size-min='1.6' word-wrapping='false'
+              pref-width='60'/>
+        <button text='~range-2-use-button' on-click='range-2-use' pref-width='14'
+                hover-hint='Put this range&apos;s controller settings back on. Press once to arm it, again to confirm.'/>
+        <button text='~range-2-button' on-click='range-2-delete' pref-width='12'
+                hover-hint='Remove this range. Press once to arm it, again to confirm.'/>
+      </horizontal>
+
+      <horizontal id='range-3-row' pref-height='6' pref-width='90' spacing='1'>
+        <text text='~range-3' align='Left' enable-auto-sizing='true'
+              font-size-max='2.6' font-size-min='1.6' word-wrapping='false'
+              pref-width='60'/>
+        <button text='~range-3-use-button' on-click='range-3-use' pref-width='14'
+                hover-hint='Put this range&apos;s controller settings back on. Press once to arm it, again to confirm.'/>
+        <button text='~range-3-button' on-click='range-3-delete' pref-width='12'
+                hover-hint='Remove this range. Press once to arm it, again to confirm.'/>
+      </horizontal>
+
+      <horizontal id='range-4-row' pref-height='6' pref-width='90' spacing='1'>
+        <text text='~range-4' align='Left' enable-auto-sizing='true'
+              font-size-max='2.6' font-size-min='1.6' word-wrapping='false'
+              pref-width='60'/>
+        <button text='~range-4-use-button' on-click='range-4-use' pref-width='14'
+                hover-hint='Put this range&apos;s controller settings back on. Press once to arm it, again to confirm.'/>
+        <button text='~range-4-button' on-click='range-4-delete' pref-width='12'
+                hover-hint='Remove this range. Press once to arm it, again to confirm.'/>
+      </horizontal>
+
+      <horizontal id='range-5-row' pref-height='6' pref-width='90' spacing='1'>
+        <text text='~range-5' align='Left' enable-auto-sizing='true'
+              font-size-max='2.6' font-size-min='1.6' word-wrapping='false'
+              pref-width='60'/>
+        <button text='~range-5-use-button' on-click='range-5-use' pref-width='14'
+                hover-hint='Put this range&apos;s controller settings back on. Press once to arm it, again to confirm.'/>
+        <button text='~range-5-button' on-click='range-5-delete' pref-width='12'
+                hover-hint='Remove this range. Press once to arm it, again to confirm.'/>
+      </horizontal>
+
+      <horizontal id='range-6-row' pref-height='6' pref-width='90' spacing='1'>
+        <text text='~range-6' align='Left' enable-auto-sizing='true'
+              font-size-max='2.6' font-size-min='1.6' word-wrapping='false'
+              pref-width='60'/>
+        <button text='~range-6-use-button' on-click='range-6-use' pref-width='14'
+                hover-hint='Put this range&apos;s controller settings back on. Press once to arm it, again to confirm.'/>
+        <button text='~range-6-button' on-click='range-6-delete' pref-width='12'
+                hover-hint='Remove this range. Press once to arm it, again to confirm.'/>
+      </horizontal>
+
+      <horizontal id='range-7-row' pref-height='6' pref-width='90' spacing='1'>
+        <text text='~range-7' align='Left' enable-auto-sizing='true'
+              font-size-max='2.6' font-size-min='1.6' word-wrapping='false'
+              pref-width='60'/>
+        <button text='~range-7-use-button' on-click='range-7-use' pref-width='14'
+                hover-hint='Put this range&apos;s controller settings back on. Press once to arm it, again to confirm.'/>
+        <button text='~range-7-button' on-click='range-7-delete' pref-width='12'
+                hover-hint='Remove this range. Press once to arm it, again to confirm.'/>
+      </horizontal>
+
+      <horizontal id='range-8-row' pref-height='6' pref-width='90' spacing='1'>
+        <text text='~range-8' align='Left' enable-auto-sizing='true'
+              font-size-max='2.6' font-size-min='1.6' word-wrapping='false'
+              pref-width='60'/>
+        <button text='~range-8-use-button' on-click='range-8-use' pref-width='14'
+                hover-hint='Put this range&apos;s controller settings back on. Press once to arm it, again to confirm.'/>
+        <button text='~range-8-button' on-click='range-8-delete' pref-width='12'
+                hover-hint='Remove this range. Press once to arm it, again to confirm.'/>
+      </horizontal>
+
+      <horizontal id='range-9-row' pref-height='6' pref-width='90' spacing='1'>
+        <text text='~range-9' align='Left' enable-auto-sizing='true'
+              font-size-max='2.6' font-size-min='1.6' word-wrapping='false'
+              pref-width='60'/>
+        <button text='~range-9-use-button' on-click='range-9-use' pref-width='14'
+                hover-hint='Put this range&apos;s controller settings back on. Press once to arm it, again to confirm.'/>
+        <button text='~range-9-button' on-click='range-9-delete' pref-width='12'
+                hover-hint='Remove this range. Press once to arm it, again to confirm.'/>
+      </horizontal>
+
+      <horizontal id='range-10-row' pref-height='6' pref-width='90' spacing='1'>
+        <text text='~range-10' align='Left' enable-auto-sizing='true'
+              font-size-max='2.6' font-size-min='1.6' word-wrapping='false'
+              pref-width='60'/>
+        <button text='~range-10-use-button' on-click='range-10-use' pref-width='14'
+                hover-hint='Put this range&apos;s controller settings back on. Press once to arm it, again to confirm.'/>
+        <button text='~range-10-button' on-click='range-10-delete' pref-width='12'
+                hover-hint='Remove this range. Press once to arm it, again to confirm.'/>
+      </horizontal>
+
+      <horizontal id='range-11-row' pref-height='6' pref-width='90' spacing='1'>
+        <text text='~range-11' align='Left' enable-auto-sizing='true'
+              font-size-max='2.6' font-size-min='1.6' word-wrapping='false'
+              pref-width='60'/>
+        <button text='~range-11-use-button' on-click='range-11-use' pref-width='14'
+                hover-hint='Put this range&apos;s controller settings back on. Press once to arm it, again to confirm.'/>
+        <button text='~range-11-button' on-click='range-11-delete' pref-width='12'
+                hover-hint='Remove this range. Press once to arm it, again to confirm.'/>
+      </horizontal>
+
       <horizontal id='assignments-row' pref-height='12' pref-width='90'>
         <text text='~assignments' align='Center' enable-auto-sizing='true'
               font-size-max='2.8' font-size-min='1.8' word-wrapping='false'
               pref-width='86'/>
       </horizontal>
 
-      <!-- apply-on-change, on all three, because these are not preferences: the Assign button
-           below reads them. BSML writes a setting back to its host on the screen's OK event
-           unless told otherwise, so without this the button read the range and profile from
-           before the player set them, and with nothing ever written, it looked inert. -->
-      <slider-setting id='from-slider' text='~from-label' value='start-percent'
-                      min='0' max='100' increment='2' integer-only='true'
-                      formatter='format-session' apply-on-change='true'
-                      hover-hint='Applies only to runs from before this mod was installed. Runs it has a record for are unaffected.'/>
-
-      <slider-setting id='until-slider' text='~until-label' value='end-percent'
-                      min='0' max='100' increment='2' integer-only='true'
-                      formatter='format-session' apply-on-change='true'
-                      hover-hint='Applies only to runs from before this mod was installed.'/>
-
-      <list-setting id='profile-list' text='~profile-label' value='profile'
-                    choices='profile-choices' apply-on-change='true'
-                    hover-hint='Which controller profile was in use for that range. Replays do not record it.'/>
-
-      <horizontal pref-height='7' pref-width='90' spacing='2'>
-        <button text='Assign range' on-click='assign'
-                hover-hint='Records the range and profile above as one segment, so several grips can be described.'/>
-        <button text='Remove Last Range' on-click='remove-last'
-                hover-hint='Forget the most recent assigned range.'/>
-        <button text='Clear Ranges' on-click='clear-assignments'
-                hover-hint='Forget every assigned range.'/>
+      <horizontal id='managed-header-row' pref-height='5' pref-width='90'>
+        <text text='~managed-header' align='Center' font-size='2.6'
+              pref-width='86' word-wrapping='true'/>
       </horizontal>
 
-      <horizontal id='note-row' pref-height='5' pref-width='90'>
-        <text text='~note' align='Center' font-size='2.9'/>
+      <!-- Rows here too, for the Use button. No delete beside them: the mod wrote these
+           down as they happened, and there is nothing in a record of what the settings were
+           for a player to disagree with. -->
+      <horizontal id='managed-0-row' pref-height='6' pref-width='90' spacing='1'>
+        <text text='~managed-0' align='Left' enable-auto-sizing='true'
+              font-size-max='2.6' font-size-min='1.6' word-wrapping='false'
+              pref-width='72'/>
+        <button text='~managed-0-use-button' on-click='managed-0-use' pref-width='14'
+                hover-hint='Put these recorded controller settings back on. Press once to arm it, again to confirm.'/>
+      </horizontal>
+
+      <horizontal id='managed-1-row' pref-height='6' pref-width='90' spacing='1'>
+        <text text='~managed-1' align='Left' enable-auto-sizing='true'
+              font-size-max='2.6' font-size-min='1.6' word-wrapping='false'
+              pref-width='72'/>
+        <button text='~managed-1-use-button' on-click='managed-1-use' pref-width='14'
+                hover-hint='Put these recorded controller settings back on. Press once to arm it, again to confirm.'/>
+      </horizontal>
+
+      <horizontal id='managed-2-row' pref-height='6' pref-width='90' spacing='1'>
+        <text text='~managed-2' align='Left' enable-auto-sizing='true'
+              font-size-max='2.6' font-size-min='1.6' word-wrapping='false'
+              pref-width='72'/>
+        <button text='~managed-2-use-button' on-click='managed-2-use' pref-width='14'
+                hover-hint='Put these recorded controller settings back on. Press once to arm it, again to confirm.'/>
+      </horizontal>
+
+      <horizontal id='managed-3-row' pref-height='6' pref-width='90' spacing='1'>
+        <text text='~managed-3' align='Left' enable-auto-sizing='true'
+              font-size-max='2.6' font-size-min='1.6' word-wrapping='false'
+              pref-width='72'/>
+        <button text='~managed-3-use-button' on-click='managed-3-use' pref-width='14'
+                hover-hint='Put these recorded controller settings back on. Press once to arm it, again to confirm.'/>
+      </horizontal>
+
+      <horizontal id='managed-4-row' pref-height='6' pref-width='90' spacing='1'>
+        <text text='~managed-4' align='Left' enable-auto-sizing='true'
+              font-size-max='2.6' font-size-min='1.6' word-wrapping='false'
+              pref-width='72'/>
+        <button text='~managed-4-use-button' on-click='managed-4-use' pref-width='14'
+                hover-hint='Put these recorded controller settings back on. Press once to arm it, again to confirm.'/>
+      </horizontal>
+
+      <horizontal id='managed-5-row' pref-height='6' pref-width='90' spacing='1'>
+        <text text='~managed-5' align='Left' enable-auto-sizing='true'
+              font-size-max='2.6' font-size-min='1.6' word-wrapping='false'
+              pref-width='72'/>
+        <button text='~managed-5-use-button' on-click='managed-5-use' pref-width='14'
+                hover-hint='Put these recorded controller settings back on. Press once to arm it, again to confirm.'/>
+      </horizontal>
+
+      <horizontal id='managed-6-row' pref-height='6' pref-width='90' spacing='1'>
+        <text text='~managed-6' align='Left' enable-auto-sizing='true'
+              font-size-max='2.6' font-size-min='1.6' word-wrapping='false'
+              pref-width='72'/>
+        <button text='~managed-6-use-button' on-click='managed-6-use' pref-width='14'
+                hover-hint='Put these recorded controller settings back on. Press once to arm it, again to confirm.'/>
+      </horizontal>
+
+      <horizontal id='managed-7-row' pref-height='6' pref-width='90' spacing='1'>
+        <text text='~managed-7' align='Left' enable-auto-sizing='true'
+              font-size-max='2.6' font-size-min='1.6' word-wrapping='false'
+              pref-width='72'/>
+        <button text='~managed-7-use-button' on-click='managed-7-use' pref-width='14'
+                hover-hint='Put these recorded controller settings back on. Press once to arm it, again to confirm.'/>
+      </horizontal>
+
+      <horizontal id='managed-8-row' pref-height='6' pref-width='90' spacing='1'>
+        <text text='~managed-8' align='Left' enable-auto-sizing='true'
+              font-size-max='2.6' font-size-min='1.6' word-wrapping='false'
+              pref-width='72'/>
+        <button text='~managed-8-use-button' on-click='managed-8-use' pref-width='14'
+                hover-hint='Put these recorded controller settings back on. Press once to arm it, again to confirm.'/>
+      </horizontal>
+
+      <horizontal id='managed-9-row' pref-height='6' pref-width='90' spacing='1'>
+        <text text='~managed-9' align='Left' enable-auto-sizing='true'
+              font-size-max='2.6' font-size-min='1.6' word-wrapping='false'
+              pref-width='72'/>
+        <button text='~managed-9-use-button' on-click='managed-9-use' pref-width='14'
+                hover-hint='Put these recorded controller settings back on. Press once to arm it, again to confirm.'/>
+      </horizontal>
+
+      <horizontal id='managed-10-row' pref-height='6' pref-width='90' spacing='1'>
+        <text text='~managed-10' align='Left' enable-auto-sizing='true'
+              font-size-max='2.6' font-size-min='1.6' word-wrapping='false'
+              pref-width='72'/>
+        <button text='~managed-10-use-button' on-click='managed-10-use' pref-width='14'
+                hover-hint='Put these recorded controller settings back on. Press once to arm it, again to confirm.'/>
+      </horizontal>
+
+      <horizontal id='managed-11-row' pref-height='6' pref-width='90' spacing='1'>
+        <text text='~managed-11' align='Left' enable-auto-sizing='true'
+              font-size-max='2.6' font-size-min='1.6' word-wrapping='false'
+              pref-width='72'/>
+        <button text='~managed-11-use-button' on-click='managed-11-use' pref-width='14'
+                hover-hint='Put these recorded controller settings back on. Press once to arm it, again to confirm.'/>
+      </horizontal>
+
+      <horizontal id='managed-row' pref-height='6' pref-width='90'>
+        <text text='~managed' align='Center' font-size='2.4'
+              pref-width='86' word-wrapping='true'/>
       </horizontal>
 
     </settings-container>

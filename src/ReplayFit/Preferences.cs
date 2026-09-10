@@ -107,17 +107,6 @@ namespace ReplayFit
                 float.Parse(n[0], c), float.Parse(n[1], c), float.Parse(n[2], c));
         }
 
-        internal static bool InRange(DateTime when)
-        {
-            var start = RangeStart;
-            var end = RangeEnd;
-            if (start.HasValue && when < start.Value)
-            {
-                return false;
-            }
-            return !end.HasValue || when <= end.Value;
-        }
-
         private static DateTime? ReadDate(string key)
         {
             var raw = ReadKey(key);

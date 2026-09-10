@@ -163,58 +163,72 @@ namespace ReplayFit
             return coverage;
         }
 
+        /// <summary>One stretch the journal recorded for itself, and what it holds.</summary>
+        internal struct Managed
+        {
+            public DateTime From;
+            public DateTime To;
+            public Vector3 LeftRotation;
+            public Vector3 RightRotation;
+            public bool AlternativeHandling;
+            public int Runs;
+        }
+
         /// <summary>
-        /// The most recent sittings that still have replays no range accounts for.
+        /// The history the mod recorded as it was played, as ranges a player can read.
         /// </summary>
         /// <remarks>
-        /// What the fit tab offers to assign in one press. A sitting is the unit because it
-        /// is the unit a player remembers -- an evening, on one grip -- and because a range
-        /// drawn round one cannot accidentally straddle a settings change made between two.
+        /// The same shape as an assigned range and arrived at the other way round: these were
+        /// never anybody's answer, they are what the settings were at the time. Shown so the
+        /// division is visible rather than implied -- a player who has assigned four ranges
+        /// and sees the mod holding eleven more can tell that the recorded half is looking
+        /// after itself, which is the question the range controls otherwise leave open.
         ///
-        /// Newest first, because that is the end a player can still remember the grip for. A
-        /// sitting whose replays the journal already accounts for is not offered: a range over
-        /// it would be accepted, do nothing, and sit in the list looking like it had.
+        /// Collapsed on the same rule the fit groups by, so a value nudged and put back reads
+        /// as one stretch rather than three: the journal notes every write, and most writes
+        /// do not move the blade.
         /// </remarks>
-        internal static List<Advice.Span> SittingsNeedingRange(int most)
+        internal static List<Managed> ManagedRanges()
         {
-            var assignments = Preferences.Assignments;
-            var wanted = new List<Advice.Span>();
-            var sittings = Advice.Sessions;
-            for (var i = sittings.Count - 1; i >= 0 && wanted.Count < most; i--)
+            var out_ = new List<Managed>();
+            var entries = OffsetJournal.Read();
+            if (entries.Count == 0)
             {
-                var sitting = sittings[i];
-                var loose = 0;
+                return out_;
+            }
+            var previous = default(OffsetJournal.Epoch);
+            for (var i = 0; i < entries.Count; i++)
+            {
+                var e = entries[i];
+                if (out_.Count > 0 && SameGrip(previous, e))
+                {
+                    continue;
+                }
+                previous = e;
+                out_.Add(new Managed
+                {
+                    From = e.From,
+                    To = DateTime.MaxValue,
+                    LeftRotation = e.LeftRotation,
+                    RightRotation = e.RightRotation,
+                    AlternativeHandling = e.AlternativeHandling,
+                });
+            }
+            // Each ends where the next begins. The last one is still running, so it ends now.
+            for (var i = 0; i < out_.Count; i++)
+            {
+                var m = out_[i];
+                m.To = i + 1 < out_.Count ? out_[i + 1].From : DateTime.UtcNow;
                 foreach (var run in _read)
                 {
-                    if (run.FromJournal || run.Played < sitting.Start || run.Played > sitting.End)
+                    if (run.FromJournal && run.Played >= m.From && run.Played < m.To)
                     {
-                        continue;
-                    }
-                    var covered = false;
-                    foreach (var a in assignments)
-                    {
-                        if (a.Covers(run.Played))
-                        {
-                            covered = true;
-                            break;
-                        }
-                    }
-                    if (!covered)
-                    {
-                        loose++;
+                        m.Runs++;
                     }
                 }
-                if (loose > 0)
-                {
-                    wanted.Add(new Advice.Span
-                    {
-                        Start = sitting.Start,
-                        End = sitting.End,
-                        Runs = loose,
-                    });
-                }
+                out_[i] = m;
             }
-            return wanted;
+            return out_;
         }
 
         /// <summary>
@@ -230,10 +244,15 @@ namespace ReplayFit
         internal static int RunsWithoutRange()
         {
             var assignments = Preferences.Assignments;
+            var sittings = Advice.Governable;
+            var from = sittings.Count > 0 ? sittings[0].Start : DateTime.MinValue;
             var loose = 0;
             foreach (var run in _read)
             {
-                if (run.FromJournal)
+                // Only what a slider can still reach. Runs older than the window cannot be
+                // given a range at all, so counting them here would report a job with no
+                // control to do it -- they are named separately, once, as out of reach.
+                if (run.FromJournal || run.Played < from)
                 {
                     continue;
                 }
@@ -446,6 +465,13 @@ namespace ReplayFit
             // them, and a range picked at either end can select no usable data at all while
             // looking perfectly reasonable.
             Advice.Sessions = Sittings(found);
+            var reachable = Reachable(found);
+            Advice.Governable = Sittings(reachable);
+            Advice.ChartFrom = reachable.Count > 0
+                ? reachable.Min(r => r.Played)
+                : DateTime.MinValue;
+            Advice.Unreachable =
+                found.Count(r => !r.FromJournal) - reachable.Count;
 
             // Run now rather than at fit time, so the verdict is on screen while the player
             // is deciding what to tell the panel -- which is the only moment it is any use.
@@ -522,6 +548,51 @@ namespace ReplayFit
             }
         }
 
+        /// <summary>A year of unrecorded play, which is as much as the sliders can address.</summary>
+        /// <remarks>
+        /// The sliders move over sittings and BSML fixes their step count in the markup, so
+        /// the reach of one notch is however many sittings a player happens to have divided by
+        /// a hundred. A three-year library put four sittings behind every notch, which is not
+        /// a precision problem: two ranges could not be made to meet, and describing adjacent
+        /// stretches meant overlapping them.
+        ///
+        /// Measured back from the newest unrecorded run rather than from today. Anchored on
+        /// today, a player who installed the mod a year ago has every unrecorded run outside
+        /// the window and a set of controls addressing nothing.
+        ///
+        /// The whole history if a year does not hold enough to fit on. The cap exists to make
+        /// the controls usable, and controls that work on too little data are not usable
+        /// either -- so where the two conflict, the data wins and the notches stay coarse.
+        /// </remarks>
+        private const int ReachableDays = 365;
+
+        private static List<ReplayCuts.Extraction> Reachable(
+            List<ReplayCuts.Extraction> found)
+        {
+            var loose = found.Where(r => !r.FromJournal).OrderBy(r => r.Played).ToList();
+            if (loose.Count == 0)
+            {
+                return loose;
+            }
+            var newest = loose[loose.Count - 1].Played;
+            var cutoff = newest.AddDays(-ReachableDays);
+            var kept = loose.Where(r => r.Played >= cutoff).ToList();
+            if (kept.Count < MinRunsToRecommend)
+            {
+                Plugin.Log.Info(
+                    $"only {kept.Count} unrecorded runs in the year to {Shown.Day(newest)}; "
+                    + $"the ranges reach the whole history instead");
+                return loose;
+            }
+            if (kept.Count < loose.Count)
+            {
+                Plugin.Log.Info(
+                    $"{loose.Count - kept.Count} unrecorded runs are older than "
+                    + $"{Shown.Day(cutoff)} and cannot be given a range");
+            }
+            return kept;
+        }
+
         /// <summary>
         /// Group runs into sittings: continuous play, broken by a gap.
         /// </summary>
@@ -574,7 +645,11 @@ namespace ReplayFit
             var groups = new List<(OffsetJournal.Epoch Epoch, List<ReplayCuts.Extraction> Runs)>();
             var assignments = Preferences.Assignments;
             var unassigned = 0;
+            var stranded = 0;
             var unknownEpoch = 0;
+            var window = Advice.Governable.Count > 0
+                ? Advice.Governable[0].Start
+                : DateTime.MinValue;
 
             foreach (var run in runs)
             {
@@ -610,6 +685,12 @@ namespace ReplayFit
                     if (!matched)
                     {
                         unassigned++;
+                        if (run.Played < window)
+                        {
+                            // Older than the sliders reach, so no range could have covered
+                            // it. Counted for the arithmetic, kept out of the sentence.
+                            stranded++;
+                        }
                         continue;
                     }
                 }
@@ -722,8 +803,18 @@ namespace ReplayFit
                 Advice.Left = $"No group has the {MinRunsToRecommend} runs needed to advise.";
                 Advice.Right = "Widen the date range, or play more.";
             }
+            // Only what a player could still do something about. The line used to count the
+            // replays that predate the assignable window among the unassigned, which reads as
+            // work left undone and is not: there is no control that would take them.
+            var fixable = unassigned - stranded;
             Advice.Summary = $"Fitted {runs.Count - unassigned} runs"
-                             + (unassigned > 0 ? $"; {unassigned} unassigned and unused." : ".");
+                             + (fixable > 0 ? $"; {fixable} have no range and were left out." : ".");
+            if (stranded > 0)
+            {
+                Plugin.Log.Info(
+                    $"{stranded} runs older than {Shown.Day(window)} were left out; "
+                    + "no range can reach them");
+            }
             Advice.Publish();
         }
 
