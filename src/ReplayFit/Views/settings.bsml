@@ -41,6 +41,95 @@
       </horizontal>
 
       <!-- Directly over the controls it talks about: the line ends "assigned below". -->
+      <!-- One sitting a row: what it is on the left, which grip it was on in the middle,
+           and the press that records it on the right. A list-setting is a full settings row
+           already shaped this way, its label sits left and its picker right, so the only
+           thing added is the button and a width that leaves room for it. -->
+      <horizontal id='sittings-header' pref-height='9' pref-width='90'>
+        <text text='~sittings-header' align='Center' font-size='2.7'
+              pref-width='86' word-wrapping='true'/>
+      </horizontal>
+
+      <horizontal id='sitting-0-row' pref-height='7' pref-width='90' spacing='1'>
+        <list-setting id='sitting-0-list' text='~sitting-0' value='sitting-0-profile'
+                      choices='profile-choices' apply-on-change='true' pref-width='72'/>
+        <button text='Add' on-click='sitting-0-add' pref-width='13'
+                hover-hint='Record that sitting as a range on the settings chosen beside it.'/>
+      </horizontal>
+
+      <horizontal id='sitting-1-row' pref-height='7' pref-width='90' spacing='1'>
+        <list-setting id='sitting-1-list' text='~sitting-1' value='sitting-1-profile'
+                      choices='profile-choices' apply-on-change='true' pref-width='72'/>
+        <button text='Add' on-click='sitting-1-add' pref-width='13'
+                hover-hint='Record that sitting as a range on the settings chosen beside it.'/>
+      </horizontal>
+
+      <horizontal id='sitting-2-row' pref-height='7' pref-width='90' spacing='1'>
+        <list-setting id='sitting-2-list' text='~sitting-2' value='sitting-2-profile'
+                      choices='profile-choices' apply-on-change='true' pref-width='72'/>
+        <button text='Add' on-click='sitting-2-add' pref-width='13'
+                hover-hint='Record that sitting as a range on the settings chosen beside it.'/>
+      </horizontal>
+
+      <horizontal id='sitting-3-row' pref-height='7' pref-width='90' spacing='1'>
+        <list-setting id='sitting-3-list' text='~sitting-3' value='sitting-3-profile'
+                      choices='profile-choices' apply-on-change='true' pref-width='72'/>
+        <button text='Add' on-click='sitting-3-add' pref-width='13'
+                hover-hint='Record that sitting as a range on the settings chosen beside it.'/>
+      </horizontal>
+
+      <horizontal id='sitting-4-row' pref-height='7' pref-width='90' spacing='1'>
+        <list-setting id='sitting-4-list' text='~sitting-4' value='sitting-4-profile'
+                      choices='profile-choices' apply-on-change='true' pref-width='72'/>
+        <button text='Add' on-click='sitting-4-add' pref-width='13'
+                hover-hint='Record that sitting as a range on the settings chosen beside it.'/>
+      </horizontal>
+
+      <horizontal id='needed-row' pref-height='6' pref-width='90'>
+        <text text='~ranges-needed' align='Center' font-size='2.7'
+              pref-width='86' word-wrapping='true'/>
+      </horizontal>
+
+      <horizontal pref-height='8' pref-width='90'>
+        <action-button id='fit-button' text='~fit-button' on-click='fit'
+                hover-hint='Fits both hands to the range above. Fast, so change the range and refit freely.'/>
+      </horizontal>
+
+      <!-- The same pair as at the top, under the button that drives them. A fit's progress
+           and the line it leaves behind belong beside the fit, not four rows above it; the two
+           are one row apart in the layout and only ever one of them is on screen. -->
+      <horizontal id='fit-status-row' pref-height='6' pref-width='90'>
+        <text text='~status' align='Center' font-size='3.2'/>
+      </horizontal>
+
+      <horizontal id='fit-progress-row' pref-height='4' pref-width='80' bg='panel-top'>
+        <image id='fit-progress-fill' src='#RoundRect10' pref-height='3' pref-width='78'
+               image-color='#4af'/>
+      </horizontal>
+
+      <horizontal id='advisory-row' pref-height='9' pref-width='90'>
+        <text text='~advisory' align='Center' font-size='3.2'/>
+      </horizontal>
+
+      <!-- Applying is a press, never a consequence of fitting. The fit is cheap and worth
+           re-running with a different range; changing the grip out from under a player who was
+           only comparing answers is not something they asked for. -->
+      <list-setting id='target-list' text='3. Save the fit to profile' value='target'
+                    choices='target-choices' apply-on-change='true'
+                    hover-hint='Which profile the fitted numbers are written into. It becomes the profile in use.'/>
+
+      <horizontal id='apply-row' pref-height='8' pref-width='90'>
+        <action-button id='apply-button' text='3. Apply and switch to it' on-click='apply'
+                hover-hint='Writes the fit into that profile, switches to it, and records the change so later replays are tied to it.'/>
+      </horizontal>
+
+    </settings-container>
+  </tab>
+
+  <tab tags='replayfit' tab-name='Ranges'>
+    <settings-container anchor-min='0 0' anchor-max='1 1' size-delta='0 0'
+                        anchored-position='0 0'>
+
       <horizontal id='evidence-row' pref-height='7' pref-width='90'>
         <text text='~evidence' align='Center' font-size='2.9'/>
       </horizontal>
@@ -50,7 +139,9 @@
            viewport, so a panel at its resting scroll position said nothing about what had been
            assigned to it. -->
       <horizontal id='assignments-row' pref-height='12' pref-width='90'>
-        <text text='~assignments' align='Center' font-size='2.9'/>
+        <text text='~assignments' align='Center' enable-auto-sizing='true'
+              font-size-max='2.8' font-size-min='1.8' word-wrapping='false'
+              pref-width='86'/>
       </horizontal>
 
       <!-- apply-on-change, on all three, because these are not preferences: the Assign button
@@ -82,39 +173,6 @@
 
       <horizontal id='note-row' pref-height='5' pref-width='90'>
         <text text='~note' align='Center' font-size='2.9'/>
-      </horizontal>
-
-      <horizontal pref-height='8' pref-width='90'>
-        <action-button id='fit-button' text='~fit-button' on-click='fit'
-                hover-hint='Fits both hands to the range above. Fast, so change the range and refit freely.'/>
-      </horizontal>
-
-      <!-- The same pair as at the top, under the button that drives them. A fit's progress
-           and the line it leaves behind belong beside the fit, not four rows above it; the two
-           are one row apart in the layout and only ever one of them is on screen. -->
-      <horizontal id='fit-status-row' pref-height='6' pref-width='90'>
-        <text text='~status' align='Center' font-size='3.2'/>
-      </horizontal>
-
-      <horizontal id='fit-progress-row' pref-height='4' pref-width='80' bg='panel-top'>
-        <image id='fit-progress-fill' src='#RoundRect10' pref-height='3' pref-width='78'
-               image-color='#4af'/>
-      </horizontal>
-
-      <horizontal id='advisory-row' pref-height='9' pref-width='90'>
-        <text text='~advisory' align='Center' font-size='3.2'/>
-      </horizontal>
-
-      <!-- Applying is a press, never a consequence of fitting. The fit is cheap and worth
-           re-running with a different range; changing the grip out from under a player who was
-           only comparing answers is not something they asked for. -->
-      <list-setting id='target-list' text='4. Save the fit to profile' value='target'
-                    choices='target-choices' apply-on-change='true'
-                    hover-hint='Which profile the fitted numbers are written into. It becomes the profile in use.'/>
-
-      <horizontal id='apply-row' pref-height='8' pref-width='90'>
-        <action-button id='apply-button' text='4. Apply and switch to it' on-click='apply'
-                hover-hint='Writes the fit into that profile, switches to it, and records the change so later replays are tied to it.'/>
       </horizontal>
 
     </settings-container>

@@ -185,7 +185,7 @@ namespace ReplayFit
             // what: the split is the first entry in the journal, which is the moment this
             // mod first knew what the settings were, and a reader has no way to guess that.
             Say($"{maps.Count} maps played both before and since\n"
-                + $"Replay Fit started recording, {Shown.At(since.Value):d MMM}",
+                + $"Replay Fit started recording, {Shown.Day(since.Value)}",
                 $"Left  {Describe(moved[0] / compared[0])} ({better[0]}/{compared[0]})"
                 + $"      Right  {Describe(moved[1] / compared[1])} ({better[1]}/{compared[1]})",
                 $"About {accuracy:+0.00;-0.00}% accuracy");
@@ -337,7 +337,7 @@ namespace ReplayFit
             return "<size=45%>How close your cuts landed to the note centre, "
                    + "taller is better</size>\n"
                    + $"<mspace=5.2>{new string(bar)}</mspace>\n"
-                   + $"<size=45%>{Shown.At(first):d MMM} to {Shown.At(last):d MMM}   "
+                   + $"<size=45%>{Shown.Day(first)} to {Shown.Day(last)}   "
                    + $"best {best:F1} cm, worst {worst:F1} cm</size>";
         }
 
@@ -417,7 +417,7 @@ namespace ReplayFit
                 var current = s == starts.Count - 1;
                 var line = current
                     ? $"Your current settings, over {during.Count} runs:"
-                    : $"Measured on the settings from {Shown.At(from):d MMM}, "
+                    : $"Measured on the settings from {Shown.Day(from)}, "
                       + $"over {during.Count} runs:";
                 line += current
                     ? $"\nleft wants {apart[0]:F1}° more, right {apart[1]:F1}°"

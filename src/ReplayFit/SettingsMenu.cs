@@ -47,7 +47,13 @@ namespace ReplayFit
             foreach (var name in new[]
                      {
                          nameof(Status), nameof(EvidenceLine), nameof(Advisory),
-                         nameof(Headline), nameof(Hands), nameof(Gained),
+                         nameof(Headline), nameof(Hands), nameof(Gained), nameof(RangesNeeded),
+                         nameof(SittingsHeader),
+                         nameof(Sitting0), nameof(Sitting1), nameof(Sitting2),
+                         nameof(Sitting3), nameof(Sitting4),
+                         nameof(Sitting0Profile), nameof(Sitting1Profile),
+                         nameof(Sitting2Profile), nameof(Sitting3Profile),
+                         nameof(Sitting4Profile),
                          nameof(Chart), nameof(Standing),
                          nameof(AssignmentList), nameof(StartPercent), nameof(EndPercent),
                          nameof(ReadButton), nameof(FitButton),
@@ -401,7 +407,7 @@ namespace ReplayFit
                 return "no replays yet";
             }
             var span = sessions[SessionAt(percent)];
-            return $"{Shown.At(span.Start):d MMM HH:mm} ({span.Runs})";
+            return $"{Shown.Moment(span.Start)} ({span.Runs})";
         }
 
         /// <summary>
@@ -533,7 +539,7 @@ namespace ReplayFit
                 RightRotation = right,
                 AlternativeHandling = alternative,
             });
-            Advice.Note = $"Assigned {Shown.At(from):d MMM HH:mm} to {Shown.At(to):d MMM HH:mm}.";
+            Advice.Note = $"Assigned {Shown.Moment(from)} to {Shown.Moment(to)}.";
             Advice.Publish();
         }
 
@@ -558,7 +564,7 @@ namespace ReplayFit
             }
             var last = list[list.Count - 1];
             Preferences.RemoveAssignment(last);
-            Advice.Note = $"Removed {Shown.At(last.From):d MMM HH:mm} to {Shown.At(last.To):d MMM HH:mm}.";
+            Advice.Note = $"Removed {Shown.Moment(last.From)} to {Shown.Moment(last.To)}.";
             Advice.Publish();
         }
 
@@ -708,19 +714,31 @@ namespace ReplayFit
         private int _listedFor = -1;
         private string _listed = "";
         private int _assignedRuns;
+        private int _looseRuns;
 
         [UIValue("assignments")]
         public string AssignmentList
         {
             get
             {
-                if (_listedFor != Advice.Version)
-                {
-                    _listedFor = Advice.Version;
-                    _listed = BuildAssignmentList();
-                }
+                Counted();
                 return _listed;
             }
+        }
+
+        /// <summary>Refresh the list and the counts beside it, if anything has changed.</summary>
+        /// <remarks>
+        /// Three things read this memo and one of them used to force it by asking the list
+        /// for its length and discarding the answer. Saying what is meant costs a method.
+        /// </remarks>
+        private void Counted()
+        {
+            if (_listedFor == Advice.Version)
+            {
+                return;
+            }
+            _listedFor = Advice.Version;
+            _listed = BuildAssignmentList();
         }
 
         private string BuildAssignmentList()
@@ -728,6 +746,7 @@ namespace ReplayFit
             var list = Preferences.Assignments;
             var coverage = new List<Recommender.Coverage>(list.Count);
             _assignedRuns = 0;
+            _looseRuns = Recommender.RunsWithoutRange();
             foreach (var a in list)
             {
                 var covers = Recommender.RunsCoveredBy(a);
@@ -759,14 +778,20 @@ namespace ReplayFit
             {
                 var a = list[i];
                 var covers = coverage[i];
-                var held = covers.Governed > 0
-                    ? $"{covers.Governed} runs"
-                    : covers.Covered > 0
-                        ? $"{covers.Covered} already recorded"
-                        : "no runs";
-                lines.Add($"{Shown.At(a.From):d MMM HH:mm} - {Shown.At(a.To):d MMM HH:mm}  "
-                          + $"L {Short(a.LeftRotation)} R {Short(a.RightRotation)}  "
-                          + $"[{held}]");
+                // Every replay the range spans, which is what the number reads as. It used
+                // to say "already recorded" for a range holding only replays the journal
+                // knows about, on the grounds that such a range is doing nothing. True, and
+                // not worth a line: what a player can act on is how many replays still need
+                // a range, and the line above the list says that. A range that turns out to
+                // be redundant costs nothing and needs no explaining.
+                var held = covers.Covered > 0 ? $"{covers.Covered} replays" : "no replays";
+                // One line a range. Whether it fits is not settled by arithmetic here: the
+                // text is set to size itself down when it has to, so a long range reads
+                // slightly smaller rather than running off the panel. That is worth more
+                // than a width calculation of mine, which is an estimate of a font I cannot
+                // measure and has been wrong before.
+                lines.Add($"Range {i + 1}  {Shown.Moment(a.From)} - {Shown.Moment(a.To)}  "
+                          + $"L {Short(a.LeftRotation)} R {Short(a.RightRotation)}  {held}");
             }
             return string.Join("\n", lines);
         }
@@ -787,6 +812,256 @@ namespace ReplayFit
         private bool Fittable =>
             Recommender.RunsRead - Advice.UnknownRuns > 0 || _assignedRuns > 0;
 
+
+        /// <summary>
+        /// The recent sittings a range could be drawn round, offered one press at a time.
+        /// </summary>
+        /// <remarks>
+        /// Five fixed slots rather than a list built at runtime, because BSML binds by name
+        /// at parse time and a value that does not exist in the markup cannot be bound to
+        /// later. Five is what fits without pushing the fit itself off the tab, and the
+        /// oldest of them is the one a player is least likely to remember the grip for.
+        ///
+        /// The slots are written out rather than looped because there is no way to attach
+        /// these attributes at runtime. They are generated from one template so they cannot
+        /// drift apart.
+        /// </remarks>
+        private const int Slots = 5;
+
+        private readonly string[] _slotProfile = new string[Slots];
+        private int _sittingsFor = -1;
+        private List<Advice.Span> _sittings = new List<Advice.Span>();
+
+        private List<Advice.Span> Sittings()
+        {
+            if (_sittingsFor != Advice.Version)
+            {
+                _sittingsFor = Advice.Version;
+                _sittings = Recommender.HasRead
+                    ? Recommender.SittingsNeedingRange(Slots)
+                    : new List<Advice.Span>();
+            }
+            return _sittings;
+        }
+
+        private string SittingText(int slot)
+        {
+            var sittings = Sittings();
+            if (slot >= sittings.Count)
+            {
+                return "";
+            }
+            var s = sittings[slot];
+            return $"{Shown.Moment(s.Start)}   {s.Runs} replays";
+        }
+
+        /// <summary>
+        /// What this row will assign, guessed from the nearest range already drawn.
+        /// </summary>
+        /// <remarks>
+        /// Nothing here knows what these sittings were played on. A replay does not record
+        /// the offsets, which is the problem this mod exists around, and the journal starts
+        /// the day it was installed. Reading it back off the cuts is not available either:
+        /// the run-to-run spread of the fitted angle is about 1.8 degrees and profiles differ
+        /// by a few, so a single sitting cannot tell two of them apart. That was tried once
+        /// and deleted.
+        ///
+        /// What is left is the neighbours. A player's grip changes rarely, so a sitting an
+        /// evening away from a range they have already drawn was almost certainly on the same
+        /// grip, and offering that is worth more than offering nothing. It is still a guess,
+        /// so it is offered rather than applied, and the heading says to check it.
+        ///
+        /// Anything is better than the old default, which was "as they are now" -- the one
+        /// grip a sitting from before this mod was installed certainly was not on.
+        /// </remarks>
+        private string SlotProfile(int slot)
+        {
+            var choices = ProfileChoices;
+            var chosen = _slotProfile[slot];
+            if (chosen != null && choices.Contains(chosen))
+            {
+                return chosen;
+            }
+            var sittings = Sittings();
+            if (slot < sittings.Count)
+            {
+                var neighbour = Nearest(sittings[slot].Start);
+                if (neighbour != null)
+                {
+                    return neighbour;
+                }
+            }
+            return choices.Count > 0 ? (string)choices[0] : CurrentSettings;
+        }
+
+        /// <summary>The profile behind whichever assigned range sits closest in time.</summary>
+        private static string Nearest(DateTime when)
+        {
+            var best = double.MaxValue;
+            var found = (string)null;
+            foreach (var a in Preferences.Assignments)
+            {
+                var apart = when < a.From ? (a.From - when).TotalSeconds
+                          : when > a.To ? (when - a.To).TotalSeconds
+                          : 0.0;
+                if (apart >= best)
+                {
+                    continue;
+                }
+                foreach (var profile in Usable())
+                {
+                    if (Near(profile.leftController.rotation, a.LeftRotation)
+                        && Near(profile.rightController.rotation, a.RightRotation))
+                    {
+                        best = apart;
+                        found = Describe(profile);
+                        break;
+                    }
+                }
+            }
+            return found;
+        }
+
+        /// <summary>
+        /// Draw a range round one sitting and be done with it.
+        /// </summary>
+        /// <remarks>
+        /// The two sliders can express any range and are the wrong tool for the common one,
+        /// which is "that evening, on that profile". This does the whole thing in a press and
+        /// leaves the sliders for the ranges that really do span months.
+        /// </remarks>
+        private void AddSitting(int slot)
+        {
+            var sittings = Sittings();
+            if (slot >= sittings.Count)
+            {
+                return;
+            }
+            var s = sittings[slot];
+            if (!Grip(SlotProfile(slot), out var left, out var right, out var alternative))
+            {
+                Advice.Note = "Could not read those controller settings.";
+                Advice.Publish();
+                return;
+            }
+            Preferences.AddAssignment(new Preferences.Assignment
+            {
+                From = s.Start,
+                To = s.End,
+                LeftRotation = left,
+                RightRotation = right,
+                AlternativeHandling = alternative,
+            });
+            Advice.Note = $"Range added for {Shown.Moment(s.Start)}.";
+            Advice.Publish();
+        }
+
+        /// <summary>The rotations behind a profile label, or the live settings for "as now".</summary>
+        private static bool Grip(
+            string label, out Vector3 left, out Vector3 right, out bool alternative)
+        {
+            foreach (var profile in Usable())
+            {
+                if (Describe(profile) == label)
+                {
+                    left = profile.leftController.rotation;
+                    right = profile.rightController.rotation;
+                    alternative = profile.alternativeHandling;
+                    return true;
+                }
+            }
+            if (OffsetState.TryRead(out var live))
+            {
+                left = live.Left.TypedRotation;
+                right = live.Right.TypedRotation;
+                alternative = live.AlternativeHandling;
+                return true;
+            }
+            left = right = Vector3.zero;
+            alternative = true;
+            return false;
+        }
+
+        [UIValue("sitting-0")]
+        public string Sitting0 => SittingText(0);
+
+        [UIValue("sitting-0-profile")]
+        public string Sitting0Profile
+        {
+            get => SlotProfile(0);
+            set => _slotProfile[0] = value;
+        }
+
+        [UIAction("sitting-0-add")]
+        public void AddSitting0() => AddSitting(0);
+
+        [UIObject("sitting-0-row")]
+        private GameObject _sitting0Row;
+
+        [UIValue("sitting-1")]
+        public string Sitting1 => SittingText(1);
+
+        [UIValue("sitting-1-profile")]
+        public string Sitting1Profile
+        {
+            get => SlotProfile(1);
+            set => _slotProfile[1] = value;
+        }
+
+        [UIAction("sitting-1-add")]
+        public void AddSitting1() => AddSitting(1);
+
+        [UIObject("sitting-1-row")]
+        private GameObject _sitting1Row;
+
+        [UIValue("sitting-2")]
+        public string Sitting2 => SittingText(2);
+
+        [UIValue("sitting-2-profile")]
+        public string Sitting2Profile
+        {
+            get => SlotProfile(2);
+            set => _slotProfile[2] = value;
+        }
+
+        [UIAction("sitting-2-add")]
+        public void AddSitting2() => AddSitting(2);
+
+        [UIObject("sitting-2-row")]
+        private GameObject _sitting2Row;
+
+        [UIValue("sitting-3")]
+        public string Sitting3 => SittingText(3);
+
+        [UIValue("sitting-3-profile")]
+        public string Sitting3Profile
+        {
+            get => SlotProfile(3);
+            set => _slotProfile[3] = value;
+        }
+
+        [UIAction("sitting-3-add")]
+        public void AddSitting3() => AddSitting(3);
+
+        [UIObject("sitting-3-row")]
+        private GameObject _sitting3Row;
+
+        [UIValue("sitting-4")]
+        public string Sitting4 => SittingText(4);
+
+        [UIValue("sitting-4-profile")]
+        public string Sitting4Profile
+        {
+            get => SlotProfile(4);
+            set => _slotProfile[4] = value;
+        }
+
+        [UIAction("sitting-4-add")]
+        public void AddSitting4() => AddSitting(4);
+
+        [UIObject("sitting-4-row")]
+        private GameObject _sitting4Row;
+
         [UIValue("read-button")]
         public string ReadButton => Recommender.Running
             ? "Working..."
@@ -798,10 +1073,10 @@ namespace ReplayFit
         public string FitButton => Recommender.Running
             ? "Working..."
             : !Recommender.HasRead
-                ? "3. Fit both hands (read first)"
+                ? "2. Fit both hands (read first)"
                 : Fittable
-                    ? "3. Fit both hands"
-                    : "3. Fit both hands (assign a range first)";
+                    ? "2. Fit both hands"
+                    : "2. Fit both hands (assign a range first)";
 
         /// <summary>
         /// A real bar, driven straight from the component rather than through markup.
@@ -858,6 +1133,12 @@ namespace ReplayFit
 
         [UIObject("advisory-row")]
         private GameObject _advisoryRow;
+
+        [UIObject("needed-row")]
+        private GameObject _neededRow;
+
+        [UIObject("sittings-header")]
+        private GameObject _sittingsHeader;
 
         [UIObject("chart-row")]
         private GameObject _chartRow;
@@ -1088,6 +1369,47 @@ namespace ReplayFit
         private static void Show(GameObject row, string content) =>
             Show(row, content.Length > 0);
 
+        /// <summary>
+        /// Give a row the height its text needs, when that is not known in advance.
+        /// </summary>
+        /// <remarks>
+        /// Most rows hold a fixed number of lines and can be sized in the markup. The
+        /// assigned ranges cannot: there is one line per range, and a player with six of them
+        /// had five lines of text in a box built for three. A TextMeshPro that overflows is
+        /// centred on its box rather than clipped by it, so it spilled equally above and
+        /// below, over the line explaining the ranges and over the sliders that set them.
+        ///
+        /// Written from here because BSML will not bind a numeric attribute, which is the
+        /// same reason the progress bar's fill is driven from code. One and a fifth of the
+        /// font per line is TextMeshPro's own spacing at these sizes, and the extra unit
+        /// keeps a descender off the row below.
+        /// </remarks>
+        private static void Height(GameObject row, string content, float fontSize)
+        {
+            if (row == null)
+            {
+                return;
+            }
+            var layout = row.GetComponent<LayoutElement>();
+            if (layout == null)
+            {
+                return;
+            }
+            var lines = 1;
+            foreach (var c in content)
+            {
+                if (c == '\n')
+                {
+                    lines++;
+                }
+            }
+            var wanted = lines * fontSize * 1.2f + 1f;
+            if (Mathf.Abs(layout.preferredHeight - wanted) > 0.05f)
+            {
+                layout.preferredHeight = wanted;
+            }
+        }
+
         private static void Show(GameObject row, bool wanted)
         {
             if (row != null && row.activeSelf != wanted)
@@ -1108,9 +1430,20 @@ namespace ReplayFit
             Show(_fitStatusRow, Status.Length > 0 && fitting);
             Show(_timelineRow, Advice.Sessions.Count > 0);
             Show(_assignmentsRow, AssignmentList);
+            // One line per assigned range, so the row cannot be sized in the markup.
+            Height(_assignmentsRow, AssignmentList, 2.8f);
+            Height(_standingRow, Standing, 2.7f);
             Show(_evidenceRow, EvidenceLine);
             Show(_noteRow, ActionNote);
             Show(_advisoryRow, Advisory);
+            Show(_neededRow, RangesNeeded);
+            Show(_sittingsHeader, SittingsHeader);
+            var sittings = Sittings().Count;
+            Show(_sitting0Row, sittings > 0);
+            Show(_sitting1Row, sittings > 1);
+            Show(_sitting2Row, sittings > 2);
+            Show(_sitting3Row, sittings > 3);
+            Show(_sitting4Row, sittings > 4);
             Show(_chartRow, Chart);
             Show(_standingRow, Standing);
             Show(_handsRow, Hands);
@@ -1186,6 +1519,47 @@ namespace ReplayFit
         /// from", they read as a filter over everything, which is how a control that governs
         /// a third of the data looked like one that governed all of it.
         /// </remarks>
+        /// <summary>
+        /// Points at the Ranges tab, and only when it has something to say.
+        /// </summary>
+        /// <remarks>
+        /// The fit depends on runs having settings behind them, and the place to give them
+        /// settings is now a tab away. Without a word here a player would fit, be told no
+        /// group is large enough, and have no reason to think another tab existed. It goes
+        /// quiet once every run is covered, which is where a player who keeps using the mod
+        /// ends up: the journal records settings as they change, so the unassigned pile only
+        /// ever shrinks.
+        /// </remarks>
+        [UIValue("ranges-needed")]
+        public string RangesNeeded
+        {
+            get
+            {
+                if (!Recommender.HasRead || Advice.UnknownRuns == 0)
+                {
+                    return "";
+                }
+                Counted();
+                return _looseRuns == 0
+                    ? ""
+                    : $"{_looseRuns} runs have no range and will be left out of the fit. "
+                      + "Assign one on the Ranges tab.";
+            }
+        }
+
+        [UIValue("sittings-header")]
+        public string SittingsHeader
+        {
+            get
+            {
+                var n = Sittings().Count;
+                return n == 0
+                    ? ""
+                    : "Recent sittings with no range. Check the grip and add. "
+                      + "The suggestion is from your nearest range, not from the replay.";
+            }
+        }
+
         [UIValue("headline")]
         public string Headline => Recommender.HasRead
             ? Progress.Headline
@@ -1214,8 +1588,34 @@ namespace ReplayFit
         /// over the controls it refers to, it reads as a caption for them rather than as one
         /// more line of status.
         /// </remarks>
+        /// <summary>
+        /// How much of the unrecorded history the ranges actually reach.
+        /// </summary>
+        /// <remarks>
+        /// It used to say only how many runs predate the mod, which reads as a job one range
+        /// finishes. It is not: a range covering ten weeks of a fifteen-month history covers
+        /// ten weeks of runs, and a player who assigned one and saw it hold a quarter of the
+        /// number quoted had no way to tell whether the rest were unreachable or merely
+        /// unassigned. Touching AssignmentList first is what refreshes the count.
+        /// </remarks>
         [UIValue("evidence")]
-        public string EvidenceLine => Recommender.HasRead ? Advice.Evidence : "";
+        public string EvidenceLine
+        {
+            get
+            {
+                if (!Recommender.HasRead || Advice.UnknownRuns == 0)
+                {
+                    return Recommender.HasRead ? Advice.Evidence : "";
+                }
+                Counted();
+                var unused = _looseRuns;
+                var covered = Advice.UnknownRuns - unused;
+                return unused == 0
+                    ? $"All {Advice.UnknownRuns} runs that predate this mod have a range."
+                    : $"{Advice.UnknownRuns} runs predate this mod. {covered} are covered by "
+                      + $"the ranges below; {unused} still need one.";
+            }
+        }
 
         /// <summary>
         /// The range being described right now, so the labels say which one they build.
@@ -1300,8 +1700,8 @@ namespace ReplayFit
                     runs += sitting.Runs;
                 }
                 return $"<mspace=2>{new string(bar)}</mspace>\n"
-                       + $"{runs} runs from {Shown.At(first):MMM d} to "
-                       + $"{Shown.At(sessions[sessions.Count - 1].Start):MMM d}";
+                       + $"{runs} runs from {Shown.Day(first)} to "
+                       + $"{Shown.Day(sessions[sessions.Count - 1].Start)}";
             }
         }
 

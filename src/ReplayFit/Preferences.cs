@@ -267,7 +267,7 @@ namespace ReplayFit
         {
             AppendKey("assign", Serialise(a));
             Plugin.Log.Info(
-                $"assigned {Shown.At(a.From):d MMM} to {Shown.At(a.To):d MMM}: L {a.LeftRotation} R {a.RightRotation}");
+                $"assigned {Shown.Day(a.From)} to {Shown.Day(a.To)}: L {a.LeftRotation} R {a.RightRotation}");
         }
 
         /// <summary>
@@ -281,7 +281,7 @@ namespace ReplayFit
         internal static void RemoveAssignment(Assignment a)
         {
             RemoveLine("assign", Serialise(a));
-            Plugin.Log.Info($"removed the range {Shown.At(a.From):d MMM} to {Shown.At(a.To):d MMM}");
+            Plugin.Log.Info($"removed the range {Shown.Day(a.From)} to {Shown.Day(a.To)}");
         }
 
         internal static void ClearAssignments() => RemoveAll("assign");

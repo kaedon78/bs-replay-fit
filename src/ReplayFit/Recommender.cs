@@ -163,6 +163,97 @@ namespace ReplayFit
             return coverage;
         }
 
+        /// <summary>
+        /// The most recent sittings that still have replays no range accounts for.
+        /// </summary>
+        /// <remarks>
+        /// What the fit tab offers to assign in one press. A sitting is the unit because it
+        /// is the unit a player remembers -- an evening, on one grip -- and because a range
+        /// drawn round one cannot accidentally straddle a settings change made between two.
+        ///
+        /// Newest first, because that is the end a player can still remember the grip for. A
+        /// sitting whose replays the journal already accounts for is not offered: a range over
+        /// it would be accepted, do nothing, and sit in the list looking like it had.
+        /// </remarks>
+        internal static List<Advice.Span> SittingsNeedingRange(int most)
+        {
+            var assignments = Preferences.Assignments;
+            var wanted = new List<Advice.Span>();
+            var sittings = Advice.Sessions;
+            for (var i = sittings.Count - 1; i >= 0 && wanted.Count < most; i--)
+            {
+                var sitting = sittings[i];
+                var loose = 0;
+                foreach (var run in _read)
+                {
+                    if (run.FromJournal || run.Played < sitting.Start || run.Played > sitting.End)
+                    {
+                        continue;
+                    }
+                    var covered = false;
+                    foreach (var a in assignments)
+                    {
+                        if (a.Covers(run.Played))
+                        {
+                            covered = true;
+                            break;
+                        }
+                    }
+                    if (!covered)
+                    {
+                        loose++;
+                    }
+                }
+                if (loose > 0)
+                {
+                    wanted.Add(new Advice.Span
+                    {
+                        Start = sitting.Start,
+                        End = sitting.End,
+                        Runs = loose,
+                    });
+                }
+            }
+            return wanted;
+        }
+
+        /// <summary>
+        /// Runs that predate the journal and that no assigned range covers.
+        /// </summary>
+        /// <remarks>
+        /// Distinct runs, not the sum of what each range holds: ranges may overlap, and
+        /// adding their counts would report more covered than exist. This is the number the
+        /// fit itself drops, and the one a player needs to see -- "1114 need a range" invites
+        /// assigning one range and expecting to be done, when a range covering a tenth of the
+        /// history covers a tenth of the runs.
+        /// </remarks>
+        internal static int RunsWithoutRange()
+        {
+            var assignments = Preferences.Assignments;
+            var loose = 0;
+            foreach (var run in _read)
+            {
+                if (run.FromJournal)
+                {
+                    continue;
+                }
+                var covered = false;
+                foreach (var a in assignments)
+                {
+                    if (a.Covers(run.Played))
+                    {
+                        covered = true;
+                        break;
+                    }
+                }
+                if (!covered)
+                {
+                    loose++;
+                }
+            }
+            return loose;
+        }
+
         /// <summary>Step one: read the replays. Slow, and only needed once.</summary>
         internal static bool BeginRead() => Start(Step.Reading, reading => Read(reading));
 
