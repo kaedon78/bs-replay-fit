@@ -344,6 +344,11 @@ namespace ReplayFit
             CutCache.Save(keep);
             _read = found;
 
+            // Measured here rather than when the tab is opened. It walks every cut twice and
+            // reads the journal, which is nothing beside the read that just happened and a
+            // visible stall if it waits until somebody is looking at it.
+            Progress.Measure(found);
+
             // Built from the runs actually held, not from every file discovered. A third of a
             // library is One Saber, too short or unreadable, and the read stops once it has
             // enough -- so a timeline drawn from filenames offers dates with nothing behind

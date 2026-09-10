@@ -211,6 +211,21 @@ namespace ReplayFit
 
         // Deliberately a hand-rolled reader for the few fields that matter, rather than a
         // JSON dependency for a file this mod is the only writer of.
+        /// <summary>
+        /// Reads a line by looking for exact substrings, not by parsing JSON.
+        /// </summary>
+        /// <remarks>
+        /// Which means the file is only nominally JSON: the reader wants
+        /// <c>"from":"</c> and <c>"legacyValid":true</c> with no space after the colon,
+        /// because that is what <see cref="Line"/> writes. Anything that reformats this file
+        /// -- a tidy-up through a real JSON library, say, which puts a space after every
+        /// colon -- produces a file that still looks correct and that every line of this
+        /// method rejects. The failure is silent and total: no entries parse, so the journal
+        /// reads as empty and the whole settings history disappears.
+        ///
+        /// If a migration ever needs to rewrite this file, edit the lines as text and leave
+        /// the punctuation alone, or teach this method to parse properly first.
+        /// </remarks>
         private static bool TryParse(string line, out Epoch epoch)
         {
             epoch = default;

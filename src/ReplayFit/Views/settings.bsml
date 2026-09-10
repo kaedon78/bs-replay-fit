@@ -1,110 +1,160 @@
-<settings-container xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'
-                    xsi:noNamespaceSchemaLocation='https://raw.githubusercontent.com/monkeymanboy/BSML-Docs/gh-pages/BSMLSchema.xsd'>
+<bg xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'
+    xsi:noNamespaceSchemaLocation='https://raw.githubusercontent.com/monkeymanboy/BSML-Docs/gh-pages/BSMLSchema.xsd'
+    size-delta='0 -10' anchored-position='0 -5'>
 
-  <!-- Wrapped with an explicit height. A bare text reports no preferred height, so the
-       container hands it everything left over and the controls end up below the fold.
+  <!-- Two tabs rather than two entries in the mod list, because the report needs the same
+       parsed replays the fit does. A panel of its own would either repeat the read, which
+       takes a minute cold, or sit empty until somebody had visited the other one first. -->
+  <tab-selector tab-tag='replayfit' anchored-position='0 10'/>
 
-       Height for two lines and then some: a text overflowing its box is centred on the box,
-       so it spills equally above and below, and the half above the first row is outside the
-       scroll viewport entirely. There is no scrolling up to reach it. -->
-  <horizontal id='status-row' pref-height='6' pref-width='90'>
-    <text text='~status' align='Center' font-size='3.2'/>
-  </horizontal>
+  <tab tags='replayfit' tab-name='Fit'>
+    <settings-container anchor-min='0 0' anchor-max='1 1' size-delta='0 0'
+                        anchored-position='0 0'>
 
-  <!-- Monospaced, so the bars sit under one another rather than drifting with glyph width,
-       and at a cell narrow enough that the row can afford enough bars to show the shape of
-       a history rather than one bar per month. -->
-  <horizontal id='timeline-row' pref-height='8' pref-width='90'>
-    <text text='~timeline' align='Center' font-size='2.2' rich-text='true'/>
-  </horizontal>
+      <!-- Wrapped with an explicit height. A bare text reports no preferred height, so the
+           container hands it everything left over and the controls end up below the fold.
 
-  <!-- Hidden unless something is running; the fill is driven from code, since BSML has no
-       progress-bar tag and will not bind a numeric attribute. -->
-  <horizontal id='progress-row' pref-height='4' pref-width='80' bg='panel-top'>
-    <image id='progress-fill' src='#RoundRect10' pref-height='3' pref-width='78'
-           image-color='#4af'/>
-  </horizontal>
+           Height for two lines and then some: a text overflowing its box is centred on the box,
+           so it spills equally above and below, and the half above the first row is outside the
+           scroll viewport entirely. There is no scrolling up to reach it. -->
+      <horizontal id='status-row' pref-height='6' pref-width='90'>
+        <text text='~status' align='Center' font-size='3.2'/>
+      </horizontal>
 
-  <horizontal pref-height='8' pref-width='90'>
-    <action-button id='read-button' text='~read-button' on-click='read'
-            hover-hint='Reads your replay files. Slow, and only needed once per session.'/>
-  </horizontal>
+      <!-- Monospaced, so the bars sit under one another rather than drifting with glyph width,
+           and at a cell narrow enough that the row can afford enough bars to show the shape of
+           a history rather than one bar per month. -->
+      <horizontal id='timeline-row' pref-height='8' pref-width='90'>
+        <text text='~timeline' align='Center' font-size='2.2' rich-text='true'/>
+      </horizontal>
 
-  <!-- Directly over the controls it talks about: the line ends "assigned below". -->
-  <horizontal id='evidence-row' pref-height='7' pref-width='90'>
-    <text text='~evidence' align='Center' font-size='2.9'/>
-  </horizontal>
+      <!-- Hidden unless something is running; the fill is driven from code, since BSML has no
+           progress-bar tag and will not bind a numeric attribute. -->
+      <horizontal id='progress-row' pref-height='4' pref-width='80' bg='panel-top'>
+        <image id='progress-fill' src='#RoundRect10' pref-height='3' pref-width='78'
+               image-color='#4af'/>
+      </horizontal>
 
-  <!-- The ranges already assigned, above the controls that add another. They are the state
-       the rest of the panel builds on, and below the buttons they were off the bottom of the
-       viewport, so a panel at its resting scroll position said nothing about what had been
-       assigned to it. -->
-  <horizontal id='assignments-row' pref-height='12' pref-width='90'>
-    <text text='~assignments' align='Center' font-size='2.9'/>
-  </horizontal>
+      <horizontal pref-height='8' pref-width='90'>
+        <action-button id='read-button' text='~read-button' on-click='read'
+                hover-hint='Reads your replay files. Slow, and only needed once per session.'/>
+      </horizontal>
 
-  <!-- apply-on-change, on all three, because these are not preferences: the Assign button
-       below reads them. BSML writes a setting back to its host on the screen's OK event
-       unless told otherwise, so without this the button read the range and profile from
-       before the player set them, and with nothing ever written, it looked inert. -->
-  <slider-setting id='from-slider' text='~from-label' value='start-percent'
-                  min='0' max='100' increment='2' integer-only='true'
-                  formatter='format-session' apply-on-change='true'
-                  hover-hint='Applies only to runs from before this mod was installed. Runs it has a record for are unaffected.'/>
+      <!-- Directly over the controls it talks about: the line ends "assigned below". -->
+      <horizontal id='evidence-row' pref-height='7' pref-width='90'>
+        <text text='~evidence' align='Center' font-size='2.9'/>
+      </horizontal>
 
-  <slider-setting id='until-slider' text='~until-label' value='end-percent'
-                  min='0' max='100' increment='2' integer-only='true'
-                  formatter='format-session' apply-on-change='true'
-                  hover-hint='Applies only to runs from before this mod was installed.'/>
+      <!-- The ranges already assigned, above the controls that add another. They are the state
+           the rest of the panel builds on, and below the buttons they were off the bottom of the
+           viewport, so a panel at its resting scroll position said nothing about what had been
+           assigned to it. -->
+      <horizontal id='assignments-row' pref-height='12' pref-width='90'>
+        <text text='~assignments' align='Center' font-size='2.9'/>
+      </horizontal>
 
-  <list-setting id='profile-list' text='~profile-label' value='profile'
-                choices='profile-choices' apply-on-change='true'
-                hover-hint='Which controller profile was in use for that range. Replays do not record it.'/>
+      <!-- apply-on-change, on all three, because these are not preferences: the Assign button
+           below reads them. BSML writes a setting back to its host on the screen's OK event
+           unless told otherwise, so without this the button read the range and profile from
+           before the player set them, and with nothing ever written, it looked inert. -->
+      <slider-setting id='from-slider' text='~from-label' value='start-percent'
+                      min='0' max='100' increment='2' integer-only='true'
+                      formatter='format-session' apply-on-change='true'
+                      hover-hint='Applies only to runs from before this mod was installed. Runs it has a record for are unaffected.'/>
 
-  <horizontal pref-height='7' pref-width='90' spacing='2'>
-    <button text='Assign range' on-click='assign'
-            hover-hint='Records the range and profile above as one segment, so several grips can be described.'/>
-    <button text='Remove Last Range' on-click='remove-last'
-            hover-hint='Forget the most recent assigned range.'/>
-    <button text='Clear Ranges' on-click='clear-assignments'
-            hover-hint='Forget every assigned range.'/>
-  </horizontal>
+      <slider-setting id='until-slider' text='~until-label' value='end-percent'
+                      min='0' max='100' increment='2' integer-only='true'
+                      formatter='format-session' apply-on-change='true'
+                      hover-hint='Applies only to runs from before this mod was installed.'/>
 
-  <horizontal id='note-row' pref-height='5' pref-width='90'>
-    <text text='~note' align='Center' font-size='2.9'/>
-  </horizontal>
+      <list-setting id='profile-list' text='~profile-label' value='profile'
+                    choices='profile-choices' apply-on-change='true'
+                    hover-hint='Which controller profile was in use for that range. Replays do not record it.'/>
 
-  <horizontal pref-height='8' pref-width='90'>
-    <action-button id='fit-button' text='~fit-button' on-click='fit'
-            hover-hint='Fits both hands to the range above. Fast, so change the range and refit freely.'/>
-  </horizontal>
+      <horizontal pref-height='7' pref-width='90' spacing='2'>
+        <button text='Assign range' on-click='assign'
+                hover-hint='Records the range and profile above as one segment, so several grips can be described.'/>
+        <button text='Remove Last Range' on-click='remove-last'
+                hover-hint='Forget the most recent assigned range.'/>
+        <button text='Clear Ranges' on-click='clear-assignments'
+                hover-hint='Forget every assigned range.'/>
+      </horizontal>
 
-  <!-- The same pair as at the top, under the button that drives them. A fit's progress
-       and the line it leaves behind belong beside the fit, not four rows above it; the two
-       are one row apart in the layout and only ever one of them is on screen. -->
-  <horizontal id='fit-status-row' pref-height='6' pref-width='90'>
-    <text text='~status' align='Center' font-size='3.2'/>
-  </horizontal>
+      <horizontal id='note-row' pref-height='5' pref-width='90'>
+        <text text='~note' align='Center' font-size='2.9'/>
+      </horizontal>
 
-  <horizontal id='fit-progress-row' pref-height='4' pref-width='80' bg='panel-top'>
-    <image id='fit-progress-fill' src='#RoundRect10' pref-height='3' pref-width='78'
-           image-color='#4af'/>
-  </horizontal>
+      <horizontal pref-height='8' pref-width='90'>
+        <action-button id='fit-button' text='~fit-button' on-click='fit'
+                hover-hint='Fits both hands to the range above. Fast, so change the range and refit freely.'/>
+      </horizontal>
 
-  <horizontal id='advisory-row' pref-height='9' pref-width='90'>
-    <text text='~advisory' align='Center' font-size='3.2'/>
-  </horizontal>
+      <!-- The same pair as at the top, under the button that drives them. A fit's progress
+           and the line it leaves behind belong beside the fit, not four rows above it; the two
+           are one row apart in the layout and only ever one of them is on screen. -->
+      <horizontal id='fit-status-row' pref-height='6' pref-width='90'>
+        <text text='~status' align='Center' font-size='3.2'/>
+      </horizontal>
 
-  <!-- Applying is a press, never a consequence of fitting. The fit is cheap and worth
-       re-running with a different range; changing the grip out from under a player who was
-       only comparing answers is not something they asked for. -->
-  <list-setting id='target-list' text='4. Save the fit to profile' value='target'
-                choices='target-choices' apply-on-change='true'
-                hover-hint='Which profile the fitted numbers are written into. It becomes the profile in use.'/>
+      <horizontal id='fit-progress-row' pref-height='4' pref-width='80' bg='panel-top'>
+        <image id='fit-progress-fill' src='#RoundRect10' pref-height='3' pref-width='78'
+               image-color='#4af'/>
+      </horizontal>
 
-  <horizontal id='apply-row' pref-height='8' pref-width='90'>
-    <action-button id='apply-button' text='4. Apply and switch to it' on-click='apply'
-            hover-hint='Writes the fit into that profile, switches to it, and records the change so later replays are tied to it.'/>
-  </horizontal>
+      <horizontal id='advisory-row' pref-height='9' pref-width='90'>
+        <text text='~advisory' align='Center' font-size='3.2'/>
+      </horizontal>
 
-</settings-container>
+      <!-- Applying is a press, never a consequence of fitting. The fit is cheap and worth
+           re-running with a different range; changing the grip out from under a player who was
+           only comparing answers is not something they asked for. -->
+      <list-setting id='target-list' text='4. Save the fit to profile' value='target'
+                    choices='target-choices' apply-on-change='true'
+                    hover-hint='Which profile the fitted numbers are written into. It becomes the profile in use.'/>
+
+      <horizontal id='apply-row' pref-height='8' pref-width='90'>
+        <action-button id='apply-button' text='4. Apply and switch to it' on-click='apply'
+                hover-hint='Writes the fit into that profile, switches to it, and records the change so later replays are tied to it.'/>
+      </horizontal>
+
+    </settings-container>
+  </tab>
+
+  <tab tags='replayfit' tab-name='Progress'>
+    <settings-container anchor-min='0 0' anchor-max='1 1' size-delta='0 0'
+                        anchored-position='0 0'>
+
+      <!-- A row per fact. Every text is given a width and told to wrap, because a
+           TextMeshPro with nothing bounding it does not wrap, it runs off the panel. The
+           lines are written short enough not to need it; this is the net under that. -->
+      <horizontal pref-height='8' pref-width='90'>
+        <text text='~headline' align='Center' font-size='3.2'
+              pref-width='86' word-wrapping='true'/>
+      </horizontal>
+
+      <horizontal id='hands-row' pref-height='5' pref-width='90'>
+        <text text='~hands' align='Center' font-size='2.8'
+              pref-width='88' word-wrapping='true'/>
+      </horizontal>
+
+      <horizontal id='gained-row' pref-height='5' pref-width='90'>
+        <text text='~gained' align='Center' font-size='3.4'
+              pref-width='86' word-wrapping='true'/>
+      </horizontal>
+
+      <!-- Monospaced for the same reason the other chart is: the bars have to sit under one
+           another, and a proportional font drifts them apart across forty columns. -->
+      <horizontal id='chart-row' pref-height='15' pref-width='90'>
+        <text text='~chart' align='Center' font-size='6.6' rich-text='true'
+              pref-width='86'/>
+      </horizontal>
+
+      <horizontal id='standing-row' pref-height='9' pref-width='90'>
+        <text text='~standing' align='Center' font-size='2.7'
+              pref-width='86' word-wrapping='true'/>
+      </horizontal>
+
+    </settings-container>
+  </tab>
+
+</bg>

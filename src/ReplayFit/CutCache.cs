@@ -93,9 +93,17 @@ namespace ReplayFit
                 using (var stream = File.OpenRead(Path))
                 using (var r = new BinaryReader(stream, Encoding.UTF8))
                 {
-                    if (r.ReadInt32() != Magic || r.ReadInt32() != Version)
+                    var magic = r.ReadInt32();
+                    var version = r.ReadInt32();
+                    if (magic != Magic || version != Version)
                     {
-                        Plugin.Log.Info("cut cache is from an older build; ignoring it");
+                        // Both numbers, and no claim about which way round it is. A cache
+                        // written by a *newer* build reads exactly like one written by an
+                        // older one, and calling it old sent an afternoon looking for a
+                        // caching bug that was a version mismatch saying so all along.
+                        Plugin.Log.Info(
+                            $"cut cache is version {version}, this build reads {Version}; "
+                            + "ignoring it and reading the replays again");
                         return found;
                     }
                     var count = r.ReadInt32();

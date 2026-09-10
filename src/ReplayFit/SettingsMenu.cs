@@ -46,7 +46,10 @@ namespace ReplayFit
             }
             foreach (var name in new[]
                      {
-                         nameof(Status), nameof(EvidenceLine), nameof(Advisory), nameof(AssignmentList), nameof(StartPercent), nameof(EndPercent),
+                         nameof(Status), nameof(EvidenceLine), nameof(Advisory),
+                         nameof(Headline), nameof(Hands), nameof(Gained),
+                         nameof(Chart), nameof(Standing),
+                         nameof(AssignmentList), nameof(StartPercent), nameof(EndPercent),
                          nameof(ReadButton), nameof(FitButton),
                          nameof(ProfileChoices), nameof(Profile), nameof(TargetChoices), nameof(Target),
                          nameof(TimelineRow), nameof(ActionNote),
@@ -856,6 +859,19 @@ namespace ReplayFit
         [UIObject("advisory-row")]
         private GameObject _advisoryRow;
 
+        [UIObject("chart-row")]
+        private GameObject _chartRow;
+
+        [UIObject("hands-row")]
+        private GameObject _handsRow;
+
+        [UIObject("gained-row")]
+        private GameObject _gainedRow;
+
+
+        [UIObject("standing-row")]
+        private GameObject _standingRow;
+
         [UIComponent("apply-button")]
         private Button _applyButton;
 
@@ -1095,6 +1111,10 @@ namespace ReplayFit
             Show(_evidenceRow, EvidenceLine);
             Show(_noteRow, ActionNote);
             Show(_advisoryRow, Advisory);
+            Show(_chartRow, Chart);
+            Show(_standingRow, Standing);
+            Show(_handsRow, Hands);
+            Show(_gainedRow, Gained);
 
             // Both hidden until there is something to apply. A picker and a button that can
             // only report having nothing to do are two more rows of a panel saying no.
@@ -1166,6 +1186,23 @@ namespace ReplayFit
         /// from", they read as a filter over everything, which is how a control that governs
         /// a third of the data looked like one that governed all of it.
         /// </remarks>
+        [UIValue("headline")]
+        public string Headline => Recommender.HasRead
+            ? Progress.Headline
+            : "Read your replays on the Fit tab.";
+
+        [UIValue("hands")]
+        public string Hands => Progress.Hands;
+
+        [UIValue("gained")]
+        public string Gained => Progress.Overall;
+
+        [UIValue("chart")]
+        public string Chart => Progress.Chart;
+
+        [UIValue("standing")]
+        public string Standing => Progress.Standing;
+
         [UIValue("status")]
         public string Status => Advice.Summary;
 
